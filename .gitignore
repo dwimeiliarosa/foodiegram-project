@@ -1,0 +1,22 @@
+# Node.js / Backend
+node_modules/
+npm-debug.log
+.env
+
+# Vite / React / Frontend
+dist/
+dev-dist
+.cache
+.eslintcache
+
+# Logs & Database
+*.log
+*.sqlite
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE Files
+.vscode/
+.idea/
