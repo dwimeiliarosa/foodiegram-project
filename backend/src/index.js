@@ -85,4 +85,6 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server ready at http://localhost:${PORT}`);
+  // Tambahkan baris di bawah ini supaya link dokumentasinya muncul
+  console.log(`📜 Swagger UI ready at http://localhost:${PORT}/api-docs`);
 });
