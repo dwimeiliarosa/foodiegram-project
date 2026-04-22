@@ -51,9 +51,9 @@ if (error) {
         const query = `
             INSERT INTO recipes (
                 user_id, category_id, title, post_type, image_url, video_url,
-                ingredients, steps, cooking_time, protein, carbs, fat
+                ingredients, steps, cooking_time, protein, carbs, fat, status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending') 
             RETURNING *
         `;
         
@@ -91,7 +91,7 @@ const getAllRecipes = async (req, res) => {
             FROM recipes r
             LEFT JOIN categories c ON r.category_id = c.id
             LEFT JOIN users u ON r.user_id = u.id
-            WHERE 1=1
+            WHERE r.status = 'approved'
         `;
 
         const params = [userId]; 
@@ -382,11 +382,16 @@ const deleteRecipe = async (req, res) => {
         if (recipe.image_url) {
             try {
                 const urlParts = recipe.image_url.split('/');
-                const fileName = urlParts[urlParts.length - 1];
-                
-                // Perhatikan path 'recipes/' sesuai dashboard MinIO kamu
-                await minioClient.removeObject('foodiegram', `recipes/${fileName}`);
-                console.log(`✅ File ${fileName} berhasil dihapus dari MinIO.`);
+                const fileUrl = recipe.image_url || recipe.video_url;
+
+                if (fileUrl) {
+                    try {
+                        const fileName = fileUrl.split('/').pop(); 
+                        await minioClient.removeObject('foodiegram', `recipes/${fileName}`);
+                    } catch (minioErr) {
+                        console.error('Gagal hapus di MinIO:', minioErr.message);
+                    }
+                }
             } catch (minioErr) {
                 console.error('❌ MinIO Delete Error:', minioErr.message);
                 // Kita tidak return error 500 di sini karena database sudah terhapus
@@ -517,6 +522,7 @@ const getRecipeFeed = async (req, res) => {
             FROM recipes r
             LEFT JOIN categories c ON r.category_id = c.id
             LEFT JOIN users u ON r.user_id = u.id
+            WHERE r.status = 'approved'
             ORDER BY r.created_at DESC
             LIMIT $2 OFFSET $3
         `;
@@ -712,8 +718,59 @@ const getCategories = async (req, res) => {
     }
 };
 
+const getPendingRecipes = async (req, res) => {
+    try {
+        const query = `
+            SELECT r.*, u.username 
+            FROM recipes r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.status = 'pending'
+            ORDER BY r.created_at ASC
+        `;
+        const result = await db.query(query);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: "Gagal mengambil antrean resep" });
+    }
+};
 
-// --- EKSPOR SEMUA FUNGSI ---
+const verifyRecipe = async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body; // Isinya: 'approved' atau 'rejected'
+
+    // 1. Validasi Input: Pastikan status hanya approved atau rejected
+    const validStatuses = ['approved', 'rejected'];
+    if (!validStatuses.includes(status)) {
+        return res.status(400).json({ 
+            message: "Status tidak valid! Gunakan 'approved' atau 'rejected'." 
+        });
+    }
+
+    try {
+        // 2. Update status di database
+        const query = "UPDATE recipes SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *";
+        const result = await db.query(query, [status, id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "Resep tidak ditemukan" });
+        }
+
+        // 3. Pesan custom agar Admin tahu apakah resep diterima atau ditolak
+        const successMessage = status === 'approved' 
+            ? "Resep telah disetujui dan sekarang tampil di feed publik. ✅" 
+            : "Resep telah ditolak dan tidak akan muncul di feed publik. ❌";
+
+        res.status(200).json({ 
+            message: successMessage, 
+            recipe: result.rows[0] 
+        });
+    } catch (error) {
+        console.error('Error Validasi Admin:', error.message);
+        res.status(500).json({ message: "Gagal memproses validasi resep" });
+    }
+};
+
+
 module.exports = { 
     createRecipe, 
     getAllRecipes,
@@ -735,5 +792,7 @@ module.exports = {
     getCategories,
     createCategory,
     updateCategory,
-    deleteCategory
+    deleteCategory,
+    getPendingRecipes, 
+    verifyRecipe
 };

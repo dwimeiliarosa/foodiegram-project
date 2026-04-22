@@ -4,8 +4,9 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const db = require('./config/db'); 
 const authRoutes = require('./routes/authRoutes'); 
-// --- 1. LETAKKAN IMPORT DI SINI ---
 const recipeRoutes = require('./routes/recipeRoutes'); 
+// --- 1. LETAKKAN IMPORT DI SINI ---
+const cameraRoutes = require('./routes/cameraRoutes'); 
 
 const { initBucket } = require('./config/minio'); 
 require('dotenv').config();
@@ -41,7 +42,7 @@ const swaggerOptions = {
       },
     },
   },
-  apis: ['./src/routes/*.js'], 
+  apis: ['./routes/*.js', './src/routes/*.js'], // Aku tambahkan './routes/*.js' agar Swagger bisa baca file route baru kamu
 };
 
 const swaggerDocs = swaggerJsdoc(swaggerOptions);
@@ -67,12 +68,14 @@ initBucket(process.env.MINIO_BUCKET || 'foodiegram');
 // --- 4. Daftar Routes ---
 app.use('/api/auth', authRoutes); 
 app.use('/api/recipes', recipeRoutes); 
+// Tambahkan route kamera di sini
+app.use('/api/camera', cameraRoutes); 
 
 app.get('/', (req, res) => {
   res.send('Server FoodieGram Berjalan! 🥗');
 });
 
-// --- 5. GLOBAL ERROR HANDLER (TAMBAHKAN INI SEBELUM app.listen) ---
+// --- 5. GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {
     console.error('Global Error:', err.stack);
     res.status(err.status || 500).json({
@@ -85,6 +88,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server ready at http://localhost:${PORT}`);
-  // Tambahkan baris di bawah ini supaya link dokumentasinya muncul
   console.log(`📜 Swagger UI ready at http://localhost:${PORT}/api-docs`);
 });
