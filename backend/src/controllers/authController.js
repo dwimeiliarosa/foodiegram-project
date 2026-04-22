@@ -53,21 +53,29 @@ const login = async (req, res) => {
             return res.status(401).json({ message: 'Email atau Password salah' });
         }
 
-        // 3. Buat JWT Token
-        const token = jwt.sign(
-            { 
-                id: user.id, 
-                username: user.username, 
-                role: user.role 
-            },
+        // 3. Buat Access Token & Refresh Token
+        // Access Token (Umur pendek - 15 menit)
+        const accessToken = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
             process.env.JWT_SECRET,
-            { expiresIn: '1d' }
+            { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
         );
 
-        // 4. Kirim respon sukses
+        // Refresh Token (Umur panjang - 7 hari)
+        const refreshToken = jwt.sign(
+            { id: user.id },
+            process.env.JWT_REFRESH_SECRET,
+            { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+        );
+
+        // 4. Simpan Refresh Token ke Database (Update kolom refresh_token)
+        await db.query('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
+
+        // 5. Kirim respon sukses
         res.status(200).json({
             message: 'Login Berhasil!',
-            token: token,
+            accessToken: accessToken,
+            refreshToken: refreshToken,
             user: {
                 id: user.id,
                 username: user.username,
@@ -82,10 +90,49 @@ const login = async (req, res) => {
     }
 };
 
+// --- FUNGSI REFRESH TOKEN ---
+const refreshToken = async (req, res) => {
+    const { token } = req.body; // Frontend mengirim refreshToken di body
+
+    if (!token) {
+        return res.status(401).json({ message: 'Refresh Token tidak ditemukan' });
+    }
+
+    try {
+        // 1. Cek apakah token ada di database
+        const userResult = await db.query('SELECT * FROM users WHERE refresh_token = $1', [token]);
+        
+        if (userResult.rows.length === 0) {
+            return res.status(403).json({ message: 'Refresh Token tidak valid atau sudah dihapus' });
+        }
+
+        const user = userResult.rows[0];
+
+        // 2. Verifikasi Refresh Token menggunakan Secret khusus Refresh
+        jwt.verify(token, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
+            if (err) {
+                return res.status(403).json({ message: 'Refresh Token kadaluwarsa' });
+            }
+
+            // 3. Jika valid, buat Access Token baru
+            const newAccessToken = jwt.sign(
+                { id: user.id, username: user.username, role: user.role },
+                process.env.JWT_SECRET,
+                { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+            );
+
+            res.json({ accessToken: newAccessToken });
+        });
+
+    } catch (error) {
+        console.error('Refresh Token Error:', error.message);
+        res.status(500).json({ message: 'Server Error saat refresh token' });
+    }
+};
+
 // --- FUNGSI GET PROFILE ---
 const getProfile = async (req, res) => {
     try {
-        // POSISI TEPAT: Tambahkan kolom 'role' di dalam query SELECT
         const user = await db.query('SELECT id, username, email, bio, photo_profile, role FROM users WHERE id = $1', [req.user.id]);
         
         if (user.rows.length === 0) {
@@ -103,5 +150,6 @@ const getProfile = async (req, res) => {
 module.exports = { 
     register, 
     login,
+    refreshToken,
     getProfile 
 };
