@@ -1,16 +1,15 @@
 const express = require('express');
 const router = express.Router();
-// Pastikan nama di bawah ini sesuai dengan yang kamu ekspor di authController.js
-const { register, login, getProfile } = require('../controllers/authController');
-const authenticateToken = require('../middleware/authMiddleware');
 
+const { register, login, getProfile, refreshToken } = require('../controllers/authController');
+const authenticateToken = require('../middleware/authMiddleware');
 const { upload, uploadAndResize } = require('../middleware/uploadMiddleware');
 
 /**
  * @swagger
  * tags:
- *   name: Auth
- *   description: Sistem Autentikasi User (Register, Login, & Profile)
+ *   - name: Auth
+ *     description: Sistem Autentikasi User (Register, Login, & Profile)
  */
 
 /**
@@ -71,11 +70,39 @@ router.post('/register', register);
  *                 example: passwordkamu
  *     responses:
  *       200:
- *         description: Login Berhasil, mengembalikan Token
+ *         description: Login Berhasil, mengembalikan accessToken dan refreshToken
  *       401:
  *         description: Email atau Password salah
  */
 router.post('/login', login);
+
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Mendapatkan Access Token baru menggunakan Refresh Token
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: masukkan_refresh_token_di_sini
+ *     responses:
+ *       200:
+ *         description: Berhasil mendapatkan Access Token baru
+ *       401:
+ *         description: Refresh Token tidak ditemukan
+ *       403:
+ *         description: Refresh Token tidak valid atau kadaluwarsa
+ */
+router.post('/refresh', refreshToken);
 
 /**
  * @swagger
@@ -123,9 +150,10 @@ router.post('/upload-test', authenticateToken, upload.single('image'), uploadAnd
     
     res.json({
         message: 'Upload berhasil!',
-        url: req.file.url, // URL publik dari MinIO
+        url: req.file.url, 
         size: req.file.size,
         mimetype: req.file.mimetype
     });
 });
+
 module.exports = router;

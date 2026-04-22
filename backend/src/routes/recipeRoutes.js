@@ -22,7 +22,9 @@ const {
     getCategories,
     createCategory,
     updateCategory,
-    deleteCategory
+    deleteCategory,
+    getPendingRecipes, 
+    verifyRecipe
 } = require('../controllers/recipeController');
 
 const authenticateToken = require('../middleware/authMiddleware');
@@ -42,6 +44,8 @@ const { upload, uploadAndResize } = require('../middleware/uploadMiddleware');
  *     description: Fitur interaksi user (Like, Save, Stats)
  *   - name: Social
  *     description: Fitur hubungan antar pengguna (Follow)
+ *   - name: Admin Section
+ *     description: Fitur khusus moderator/admin untuk verifikasi konten resep
  */
 
 /**
@@ -497,5 +501,56 @@ router.put('/:id', authenticateToken, updateRecipe);
  *         description: Resep berhasil dihapus
  */
 router.delete('/:id', authenticateToken, deleteRecipe);
+
+/**
+ * @swagger
+ * /api/recipes/admin/pending:
+ *   get:
+ *     summary: Mengambil antrean resep yang perlu divalidasi (Admin Only)
+ *     tags: [Admin Section]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil daftar antrean resep yang belum diverifikasi
+ */
+router.get('/admin/pending', authenticateToken, adminOnly, getPendingRecipes);
+
+/**
+ * @swagger
+ * /api/recipes/admin/verify/{id}:
+ *   patch:
+ *     summary: Menyetujui atau menolak resep (Admin Only)
+ *     tags: [Admin Section]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [approved, rejected]
+ *                 description: Pilih 'approved' untuk mempublikasikan atau 'rejected' untuk menolak.
+ *                 example: "rejected"
+ *     responses:
+ *       200:
+ *         description: Berhasil memperbarui status (Diterima/Ditolak)
+ *       400:
+ *         description: Status tidak valid (bukan approved/rejected)
+ *       403:
+ *         description: Akses ditolak (Bukan Admin)
+ */
+router.patch('/admin/verify/:id', authenticateToken, adminOnly, verifyRecipe);
 
 module.exports = router;
