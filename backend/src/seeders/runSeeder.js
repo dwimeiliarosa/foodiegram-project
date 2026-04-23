@@ -1,3 +1,4 @@
+const pool = require('../config/db');
 const seedUsers = require('./userSeeder');
 const seedCategories = require('./categorySeeder');
 const seedRecipes = require('./recipeSeeder');
@@ -6,6 +7,13 @@ const seedSaves = require('./saveSeeder');
 const seedFollows = require('./followSeeder');
 
 const runAll = async () => {
+
+
+  const res = await pool.query('SELECT current_database()');
+  console.log("📍 Terminal ini sedang terhubung ke database:", res.rows[0].current_database);
+  
+  console.log("🚀 Menjalankan Full Seeding...");
+
   console.log("🚀 Menjalankan Full Seeding (6 Tabel) untuk FoodieGram...");
   
   try {
