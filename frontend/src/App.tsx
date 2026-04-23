@@ -1,39 +1,131 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import "./App.css";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+// --- IMPORT ADMIN (DARI REKANMU) ---
+import Login from "./pages/admin/Login";
+import Register from "./pages/admin/Register";
+import Dashboard from "./pages/admin/dashboard"; 
+import ManageRecipes from "./pages/admin/ManageRecipes";
+import ManageCategories from "./pages/admin/ManageCategories";
+import { Toaster } from 'sonner';
+
+// --- IMPORT USER (MILIK WANDA) ---
+import Home from './pages/user/Home'; 
+import Profile from './pages/user/Profile';
+import RecipeDetail from './pages/user/RecipeDetail';
+import UploadRecipe from './pages/user/UploadRecipe';
+import SettingsPage from './pages/user/SettingsPage';
+import Navbar from './components/user/Navbar';
+
+// Komponen Pembungkus agar hanya Admin yang bisa masuk
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const token = localStorage.getItem("authToken");
+  const role = localStorage.getItem("userRole");
+
+  if (!token || role !== "admin") {
+    return <Navigate to="/admin/login" replace />;
+  }
+  return <>{children}</>;
+};
 
 function App() {
   return (
-    <BrowserRouter>
-      {/* Container utama dengan background dari Shadcn/Tailwind */}
-      <div className="min-h-screen bg-background text-foreground">
+    <Router>
+      {/* Toaster dari admin diletakkan di paling atas agar notifikasi muncul global */}
+      <Toaster position="top-right" richColors closeButton />
+      
+      <div className="min-h-screen bg-[#F5F5F5] text-foreground flex flex-col">
         <Routes>
-          {/* RUTE BAGIAN WANDA (USER) - Diakses di http://localhost:5173/ */}
+          {/* ============================================================ */}
+          {/* BAGIAN USER (WANDA) - Menggunakan Layout dengan Bottom Nav  */}
+          {/* ============================================================ */}
           <Route path="/" element={
-            <div className="flex flex-col items-center justify-center h-screen space-y-4">
-              <h1 className="text-5xl font-extrabold text-orange-500 tracking-tight">FoodieGram 🥘</h1>
-              <p className="text-muted-foreground text-xl">Halaman Feed - Tugas Wanda</p>
-              <button className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-all font-medium shadow-lg">
-                Jelajahi Resep
-              </button>
-            </div>
+            <>
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24">
+                <Home />
+              </main>
+              <Navbar /> 
+            </>
+          } />
+          
+          <Route path="/recipe/:id" element={
+            <>
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24">
+                <RecipeDetail />
+              </main>
+              <Navbar /> 
+            </>
           } />
 
-          {/* RUTE BAGIAN FINKAN (ADMIN) - Diakses di http://localhost:5173/admin */}
-          <Route path="/admin" element={
-            <div className="flex flex-col items-center justify-center h-screen bg-slate-50 space-y-4">
-              <div className="p-8 bg-white shadow-xl rounded-2xl border border-slate-200 text-center">
-                <h1 className="text-3xl font-bold text-slate-800">Dashboard Admin</h1>
-                <p className="mt-2 text-slate-500">Kelola Konten - Tugas Finkan</p>
-                <div className="mt-6 inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-medium">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                  Sistem Ready
-                </div>
-              </div>
+          <Route path="/profile" element={
+            <>
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24">
+                <Profile />
+              </main>
+              <Navbar /> 
+            </>
+          } />
+
+          <Route path="/upload" element={
+            <>
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24">
+                <UploadRecipe />
+              </main>
+              <Navbar /> 
+            </>
+          } />
+
+          <Route path="/settings" element={
+            <>
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24">
+                <SettingsPage />
+              </main>
+              <Navbar /> 
+            </>
+          } />
+
+          {/* ============================================================ */}
+          {/* BAGIAN ADMIN (FINKAN) - Tanpa Navbar User                   */}
+          {/* ============================================================ */}
+          <Route path="/admin/login" element={<Login />} />
+          <Route path="/admin/register" element={<Register />} />
+          
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          
+          <Route path="/admin/dashboard" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/admin/resep" element={
+            <ProtectedRoute>
+              <ManageRecipes />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/kategori" element={
+            <ProtectedRoute>
+              <ManageCategories />
+            </ProtectedRoute>
+          } />
+
+          {/* ============================================================ */}
+          {/* 404 - NOT FOUND                                              */}
+          {/* ============================================================ */}
+          <Route path="*" element={
+            <div className="flex flex-col items-center justify-center h-screen bg-white">
+              <h1 className="text-2xl font-bold">404 - Tidak Ditemukan</h1>
+              <p className="text-slate-500 mb-4">Halaman yang Anda cari tidak tersedia.</p>
+              <button 
+                onClick={() => window.location.href = "/"}
+                className="text-orange-500 underline"
+              >
+                Kembali ke Beranda
+              </button>
             </div>
           } />
         </Routes>
       </div>
-    </BrowserRouter>
+    </Router>
   );
 }
 
