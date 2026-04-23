@@ -1,12 +1,13 @@
+/* 1. Import Fondasi Utama */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+/* 2. Definisi Custom Variant */
 @custom-variant dark (&:is(.dark *));
-@tailwind components;
-@tailwind utilities;
 
+/* 3. Konfigurasi Tema (Variabel Desain) */
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
@@ -50,6 +51,7 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* 4. Definisi Warna Variabel (OKLCH) */
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -83,6 +85,8 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --radius: 1rem; 
+    --background: #F5F5F5; 
 }
 
 .dark {
@@ -119,6 +123,7 @@
     --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* 5. Gaya Dasar (Base Layer) */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -130,3 +135,7 @@
     @apply font-sans;
     }
 }
+
+/* 6. Komponen dan Utilitas Akhir (Penting diletakkan di bawah) */
+@tailwind components;
+@tailwind utilities;
