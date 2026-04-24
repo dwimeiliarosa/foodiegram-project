@@ -3,6 +3,7 @@ const router = express.Router();
 
 const { 
     getRecipeFeed,
+    getFollowingFeed,
     getTrendingRecipes,
     createRecipe, 
     getAllRecipes, 
@@ -102,6 +103,33 @@ router.get('/', authenticateToken, getAllRecipes);
  *         description: Berhasil mengambil feed
  */
 router.get('/feed', authenticateToken, getRecipeFeed);
+
+/**
+ * @swagger
+ * /api/recipes/following-feed:
+ *   get:
+ *     summary: Mendapatkan resep terbaru khusus dari orang yang diikuti (Social Feed)
+ *     tags: [Recipe Discovery]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil feed following
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 count:
+ *                   type: integer
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ */
+router.get('/following-feed', authenticateToken, getFollowingFeed);
 
 /**
  * @swagger
