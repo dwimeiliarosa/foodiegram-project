@@ -19,6 +19,7 @@ import {
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 
+
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const Dashboard = () => {
@@ -99,7 +100,7 @@ const Dashboard = () => {
       <Sidebar />
       <main className="flex-1 lg:ml-64 p-4 lg:p-8 pt-20 lg:pt-8">
         <header className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Halo, Admin Finkan! 👋</h1>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Halo, Admin Dwi! 👋</h1>
           <p className="text-slate-500">Berikut adalah ringkasan performa FoodieGram hari ini.</p>
         </header>
 
