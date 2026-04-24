@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../../lib/axios";
-import { Eye, EyeOff, Lock, Mail, ShieldCheck, User, Loader2, UserPlus } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, User, Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
@@ -16,7 +15,7 @@ const Register = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("user"); // Default register biasanya user
+  // Role langsung dikunci ke "user" secara default
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -26,19 +25,17 @@ const Register = () => {
     setError("");
 
     try {
-      // Endpoint register sesuai standar Dwi biasanya /auth/register
       await api.post("/auth/register", {
         username,
         email,
         password,
-        role,
+        role: "user", // Memastikan data yang dikirim selalu 'user'
       });
 
       toast.success("Registrasi Berhasil!", {
         description: "Silakan masuk dengan akun baru Anda.",
       });
       
-      // Setelah daftar, arahkan ke login
       navigate("/login");
     } catch (err: any) {
       setError(err.response?.data?.message || "Gagal melakukan registrasi.");
@@ -67,16 +64,7 @@ const Register = () => {
 
         <CardContent className="pb-8">
           <div className="grid gap-6">
-            <Tabs defaultValue="user" onValueChange={(value) => setRole(value)} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-100">
-                <TabsTrigger value="admin" className="data-[state=active]:bg-[#F27F22] data-[state=active]:text-white">
-                  <ShieldCheck className="w-4 h-4 mr-2" /> Admin
-                </TabsTrigger>
-                <TabsTrigger value="user" className="data-[state=active]:bg-[#F27F22] data-[state=active]:text-white">
-                  <User className="w-4 h-4 mr-2" /> User
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* TABS ADMIN/USER TELAH DIHAPUS AGAR LEBIH AMAN */}
 
             {error && (
               <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-100">
@@ -91,7 +79,7 @@ const Register = () => {
                   <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input 
                     id="username" 
-                    placeholder="finkan_pink"
+                    placeholder="nama_pengguna"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="pl-10 focus-visible:ring-[#F27F22]"
@@ -107,7 +95,7 @@ const Register = () => {
                   <Input 
                     id="email" 
                     type="email" 
-                    placeholder="pink@example.com"
+                    placeholder="nama@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 focus-visible:ring-[#F27F22]"
