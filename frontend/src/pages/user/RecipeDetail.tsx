@@ -42,7 +42,7 @@ const RecipeDetail = () => {
       {/* Gambar Besar */}
       <div className="relative w-full h-72 md:h-96 rounded-[2.5rem] overflow-hidden shadow-sm mb-6 bg-slate-200">
         <img 
-          src={recipe.image ? `http://localhost:9000/foodiegram/${recipe.image}` : '/placeholder-recipe.png'} 
+          src={recipe.image_url ? `http://localhost:9000/foodiegram/${recipe.image_url}` : '/placeholder-recipe.png'} 
           alt={recipe.title}
           className="w-full h-full object-cover"
         />
