@@ -556,6 +556,36 @@ const getRecipeFeed = async (req, res) => {
     }
 };
 
+const getFollowingFeed = async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        const query = `
+            SELECT r.*, u.username, u.photo_profile, c.name as category_name,
+            (SELECT COUNT(*) FROM likes l WHERE l.recipe_id = r.id) as likes_count,
+            EXISTS(SELECT 1 FROM likes WHERE recipe_id = r.id AND user_id = $1) as is_liked,
+            EXISTS(SELECT 1 FROM saves WHERE recipe_id = r.id AND user_id = $1) as is_saved
+            FROM recipes r
+            JOIN follows f ON r.user_id = f.following_id
+            JOIN users u ON r.user_id = u.id
+            LEFT JOIN categories c ON r.category_id = c.id
+            WHERE f.follower_id = $1 AND r.status = 'approved'
+            ORDER BY r.created_at DESC
+        `;
+        
+        const result = await db.query(query, [userId]);
+
+        res.status(200).json({
+            message: "Feed dari orang yang kamu ikuti",
+            count: result.rowCount,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Error Following Feed:', error.message);
+        res.status(500).json({ message: "Gagal mengambil feed mengikuti" });
+    }
+};
+
 // --- FUNGSI 11: DAFTAR FOLLOWERS & FOLLOWING (UPDATE SESUAI TABEL) ---
 const getFollowers = async (req, res) => {
     try {
@@ -775,6 +805,7 @@ module.exports = {
     createRecipe, 
     getAllRecipes,
     getRecipeFeed,
+    getFollowingFeed,
     getTrendingRecipes,
     searchByIngredients,
     toggleLike,
