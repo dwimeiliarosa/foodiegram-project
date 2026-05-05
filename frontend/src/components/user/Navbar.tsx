@@ -1,68 +1,45 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Home, Search, PlusSquare, Bell, User } from 'lucide-react';
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
 
-  const isActive = (path: string) => location.pathname === path;
+  // Fungsi untuk cek apakah path ini aktif
+  const getStyle = (path: string) => 
+    location.pathname === path ? "text-orange-500" : "text-slate-400";
+
+  const getStroke = (path: string) => 
+    location.pathname === path ? 2.5 : 2;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-lg border-t border-slate-200 pb-safe">
-      {/* Container max-w-md agar ikon tidak terlalu melebar di layar besar */}
-      <div className="max-w-md mx-auto px-6 h-20 flex items-center justify-between">
-        
-        {/* Home */}
-        <Link 
-          to="/" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Home size={28} strokeWidth={isActive('/') ? 2.5 : 2} />
-        </Link>
-
-        {/* Search */}
-        <Link 
-          to="/search" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/search') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Search size={28} strokeWidth={isActive('/search') ? 2.5 : 2} />
-        </Link>
-
-        {/* TOMBOL UPLOAD (DI TENGAH) */}
-        <Link 
-          to="/upload" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/upload') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <PlusSquare size={32} strokeWidth={isActive('/upload') ? 2.5 : 2} />
-        </Link>
-
-        {/* Notifications */}
-        <Link 
-          to="/notifications" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/notifications') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Bell size={28} strokeWidth={isActive('/notifications') ? 2.5 : 2} />
-        </Link>
-
-        {/* Profile */}
-        <Link 
-          to="/profile" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/profile') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <User size={28} strokeWidth={isActive('/profile') ? 2.5 : 2} />
-        </Link>
-
-      </div>
-    </nav>
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-8 py-5 flex justify-between items-center z-50">
+      <Home 
+        className={`${getStyle('/')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/')}
+        onClick={() => navigate("/")} 
+      />
+      <Search 
+        className={`${getStyle('/search')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/search')}
+        onClick={() => navigate("/search")} 
+      />
+      <PlusSquare 
+        className={`${getStyle('/upload')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/upload')}
+        onClick={() => navigate("/upload")} 
+      />
+      <Bell 
+        className={`${getStyle('/notifications')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/notifications')}
+        onClick={() => navigate("/notifications")} 
+      />
+      <User 
+        className={`${getStyle('/profile')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/profile')}
+        onClick={() => navigate("/profile")} 
+      />
+    </div>
   );
 };
 
