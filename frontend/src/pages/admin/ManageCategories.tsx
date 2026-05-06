@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../../components/admin/Sidebar";
 import { Plus, Pencil, Trash2, Tags, Search, Loader2 } from "lucide-react";
-import api from "../../lib/axios";
+import api from "../../api/axios";
 import { toast } from "sonner"; // Import Toast untuk notifikasi
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,11 +85,13 @@ const ManageCategories = () => {
     try {
       const response = await api.delete(`/recipes/categories/${id}`);
       if (response.status === 200 || response.status === 204) {
-        setCategories((prev) => prev.filter((c) => c.id !== id));
-        toast.success("Kategori dihapus");
+        toast.success("Kategori berhasil dihapus");
+        fetchCategories(); // Panggil ulang data agar nomor urut (index) tetap rapi
       }
     } catch (error: any) {
-      toast.error("Gagal menghapus kategori");
+      toast.error("Gagal menghapus kategori", {
+        description: error.response?.data?.message || "Coba lagi nanti."
+      });
     }
   };
 

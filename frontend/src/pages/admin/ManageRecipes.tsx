@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../../components/admin/Sidebar";
 import { Plus, Loader2, Pencil, Trash2, X, Check, XCircle, Search } from "lucide-react";
-import api from "../../lib/axios";
+import api from "../../api/axios";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -22,6 +22,10 @@ const ManageRecipes = () => {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectId, setRejectId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -77,24 +81,35 @@ const ManageRecipes = () => {
   useEffect(() => { fetchCats(); fetchRecipes(); }, []);
 
   // --- FUNGSI VERIFIKASI (APPROVE & REJECT) ---
-  const handleVerify = async (id: number, status: string) => {
-    try {
-      // 1. Method diganti jadi .patch
-      // 2. URL diganti jadi /recipes/admin/verify/${id} 
-      // (Asumsi base URL api kamu sudah ke /recipes, kalau belum sesuaikan full pathnya)
-      const response = await api.patch(`/recipes/admin/verify/${id}`, { status });
-      
-      // Ambil pesan sukses dari backend (biar muncul ✅ atau ❌)
-      toast.success("Berhasil", { description: response.data.message });
-      
-      fetchRecipes(); // Refresh tabel agar status berubah
-    } catch (error: any) {
-      console.error("Error Status:", error.response?.data);
-      toast.error("Gagal", { 
-        description: error.response?.data?.message || "Gagal memperbarui status" 
-      });
-    }
-  };
+  const handleVerify = async (id: number, status: string, message?: string) => {
+  // Jika reject dan belum ada pesan, buka modal dulu
+  if (status === 'rejected' && !message) {
+    setRejectId(id);
+    setIsRejectModalOpen(true);
+    return;
+  }
+
+  const toastId = toast.loading("Memproses validasi..."); 
+  
+  try {
+    // Sesuai Swagger: PATCH /api/recipes/admin/verify/{id}
+    const response = await api.patch(`/recipes/admin/verify/${id}`, { 
+      status,
+      message: message || (status === 'approved' ? "Resep disetujui" : "") 
+    });
+    
+    toast.success("Berhasil!", {
+      id: toastId,
+      description: response.data.message || `Resep telah di-${status}`,
+    });
+    
+    setIsRejectModalOpen(false);
+    setRejectReason("");
+    fetchRecipes(); 
+  } catch (error: any) {
+    toast.error("Gagal memvalidasi", { id: toastId });
+  }
+};
 
   // --- FUNGSI DELETE ---
   const handleDelete = async (id: number) => {
@@ -229,9 +244,42 @@ const ManageRecipes = () => {
           </DialogContent>
         </Dialog>
 
+        {/* --- MODAL ALASAN REJECT --- */}
+<Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
+  <DialogContent className="sm:max-w-[425px] bg-white">
+    <DialogHeader>
+      <DialogTitle className="text-red-600">Tolak Resep</DialogTitle>
+      <DialogDescription>
+        Berikan alasan mengapa resep ini ditolak agar penulis bisa memperbaikinya.
+      </DialogDescription>
+    </DialogHeader>
+    <div className="py-4">
+      <Label htmlFor="reason">Alasan Penolakan</Label>
+      <textarea
+        id="reason"
+        className="w-full mt-2 p-3 border rounded-md text-sm focus:ring-[#F27F22] focus:border-[#F27F22]"
+        placeholder="Contoh: Foto kurang jelas atau langkah memasak tidak lengkap..."
+        rows={4}
+        value={rejectReason}
+        onChange={(e) => setRejectReason(e.target.value)}
+      />
+    </div>
+    <div className="flex justify-end gap-3">
+      <Button variant="ghost" onClick={() => setIsRejectModalOpen(false)}>Batal</Button>
+      <Button 
+        className="bg-red-600 hover:bg-red-700 text-white"
+        disabled={!rejectReason.trim()}
+        onClick={() => rejectId && handleVerify(rejectId, 'rejected', rejectReason)}
+      >
+        Kirim Penolakan
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
+
         <div className="bg-white rounded-xl border overflow-hidden">
           <Table>
-            <TableHeader><TableRow><TableHead>Foto</TableHead><TableHead>Judul</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Foto</TableHead><TableHead>Judul</TableHead><TableHead>Status</TableHead><TableHead>Keterangan</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
             <TableBody>
               {isLoadingData ? (
                 <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-[#F27F22]" /></TableCell></TableRow>
@@ -240,6 +288,11 @@ const ManageRecipes = () => {
                   <TableCell><img src={r.displayImage} className="w-10 h-10 rounded object-cover border" /></TableCell>
                   <TableCell className="font-medium">{r.title}</TableCell>
                   <TableCell><Badge className={r.status === 'approved' ? "bg-green-100 text-green-700" : r.status === 'rejected' ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}>{r.status || 'pending'}</Badge></TableCell>
+                  <TableCell>
+  <span className="text-xs text-slate-500 italic">
+    {r.status === 'rejected' ? (r.message || r.rejection_reason || "Tanpa alasan") : "-"}
+  </span>
+</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       {r.status === 'pending' && (

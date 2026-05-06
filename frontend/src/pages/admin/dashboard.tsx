@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../../components/admin/Sidebar";
-import api from "../../lib/axios";
+import api from "../../api/axios";
 import { 
   Utensils, 
   Eye, 
@@ -31,47 +31,67 @@ const Dashboard = () => {
   const [chartDataState, setChartDataState] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      setIsLoading(true);
-      try {
-        const statsRes = await api.get("/recipes/stats");
-        if (statsRes.data) {
-          setStats({
-            totalPosts: statsRes.data.total_posts || 0,
-            totalViews: statsRes.data.total_views || 0,
-            totalLikes: statsRes.data.total_likes || 0
-          });
-        }
+  // --- FUNGSI UPDATE CHART ---
+  const updateChart = (data: any) => {
+    if (Array.isArray(data)) {
+      setChartDataState({
+        labels: data.map((r: any) => r.title),
+        datasets: [{
+          label: 'Jumlah Views',
+          data: data.map((r: any) => r.views || 0),
+          backgroundColor: '#F27F22',
+          borderRadius: 10,
+          barThickness: 40,
+        }],
+      });
+    }
+  };
 
+  // --- FUNGSI AMBIL DATA ---
+  const fetchDashboardData = async () => {
+    setIsLoading(true);
+    try {
+      // 1. Stats
+      const statsRes = await api.get("/recipes/stats").catch(() => null);
+      if (statsRes?.data) {
+        setStats({
+          totalPosts: statsRes.data.total_posts || 0,
+          totalViews: statsRes.data.total_views || 0,
+          totalLikes: statsRes.data.total_likes || 0
+        });
+      }
+
+      // 2. Trending
+      try {
         const trendingRes = await api.get("/recipes/trending");
         const trendingData = trendingRes.data.trending_recipes || trendingRes.data;
-
-        if (Array.isArray(trendingData)) {
-          setChartDataState({
-            labels: trendingData.map((r: any) => r.title),
-            datasets: [
-              {
-                label: 'Jumlah Views',
-                data: trendingData.map((r: any) => r.views),
-                backgroundColor: '#F27F22',
-                hoverBackgroundColor: '#d96d1a',
-                borderRadius: 10,
-                barThickness: 40,
-              },
-            ],
-          });
+        if (Array.isArray(trendingData) && trendingData.length > 0) {
+          updateChart(trendingData);
+        } else {
+          throw new Error();
         }
-      } catch (error) {
-        console.error("Gagal memuat data dashboard:", error);
-      } finally {
-        setIsLoading(false);
+      } catch {
+        // Data Dummy jika API Dwi belum ada isinya
+        updateChart([
+          { title: "Nasi Goreng", views: 450 },
+          { title: "Sate Ayam", views: 380 },
+          { title: "Soto Betawi", views: 310 }
+        ]);
       }
-    };
+    } catch (error) {
+      console.error("Dashboard error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  // --- TRIGGER SAAT HALAMAN DIBUKA ---
+  useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, []); // Ini baru benar letaknya!
 
+
+  // Fungsi helper untuk merapikan data ke Chart.js
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
