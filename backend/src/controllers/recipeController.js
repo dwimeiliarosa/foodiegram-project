@@ -219,16 +219,38 @@ const toggleSave = async (req, res) => {
 };
 
 // --- FUNGSI 5: DETAIL RESEP & UPDATE VIEWS (Sudah Beres) ---
+
 const getRecipeById = async (req, res) => {
     const { id } = req.params;
+    // Ambil userId dari token (jika ada), kalau tidak ada set ke null (tamu)
     const userId = req.user ? req.user.id : null; 
+    // Ambil IP Address untuk validasi tamu unik
+    const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     try {
+        // 1. LOGIKA VIEWS UNIK: Masukkan ke tabel histori
+        // Menggunakan ON CONFLICT DO NOTHING agar jika data sudah ada, query ini diabaikan (tidak error)
         await db.query(
-            'UPDATE recipes SET views_count = views_count + 1 WHERE id = $1',
-            [id]
+            `INSERT INTO recipe_views (recipe_id, user_id, ip_address) 
+             VALUES ($1, $2, $3) 
+             ON CONFLICT ON CONSTRAINT unique_view DO NOTHING`,
+            [id, userId, ipAddress]
         );
 
+        // 2. Hitung total view unik dari tabel histori khusus resep ini
+        const countResult = await db.query(
+            `SELECT COUNT(*) as total FROM recipe_views WHERE recipe_id = $1`,
+            [id]
+        );
+        const totalViews = parseInt(countResult.rows[0].total);
+
+        // 3. Update kolom views_count di tabel recipes agar data di dashboard tetap sinkron
+        await db.query(
+            `UPDATE recipes SET views_count = $1 WHERE id = $2`,
+            [totalViews, id]
+        );
+
+        // 4. Ambil Detail Resep Lengkap
         const query = `
             SELECT r.*, c.name as category_name, u.username,
             (SELECT COUNT(*) FROM likes WHERE recipe_id = r.id) as likes_count,
@@ -248,18 +270,15 @@ const getRecipeById = async (req, res) => {
 
         const recipe = result.rows[0];
 
-        // RESPONSE YANG SUDAH DI-CASTING KE NUMBER
+        // 5. Response dengan data yang sudah di-parsing
         res.status(200).json({
             ...recipe,
-            // Data Nutrisi (PENTING untuk Chart.js)
             protein: parseFloat(recipe.protein) || 0,
             carbs: parseFloat(recipe.carbs) || 0,
             fat: parseFloat(recipe.fat) || 0,
-            // Data Angka Lainnya
             cooking_time: parseInt(recipe.cooking_time) || 0,
             likes_count: parseInt(recipe.likes_count) || 0,
-            views_count: parseInt(recipe.views_count) || 0,
-            // Data Boolean
+            views_count: totalViews, // Menampilkan hitungan unik terbaru
             is_liked: !!recipe.is_liked, 
             is_saved: !!recipe.is_saved 
         });
@@ -766,41 +785,88 @@ const getPendingRecipes = async (req, res) => {
 
 const verifyRecipe = async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body; // Isinya: 'approved' atau 'rejected'
+    const { status, reason } = req.body;
 
-    // 1. Validasi Input: Pastikan status hanya approved atau rejected
     const validStatuses = ['approved', 'rejected'];
     if (!validStatuses.includes(status)) {
-        return res.status(400).json({ 
-            message: "Status tidak valid! Gunakan 'approved' atau 'rejected'." 
-        });
+        return res.status(400).json({ message: "Status tidak valid!" });
+    }
+
+    if (status === 'rejected' && (!reason || reason.trim() === "")) {
+        return res.status(400).json({ message: "Alasan penolakan wajib diisi!" });
     }
 
     try {
-        // 2. Update status di database
-        const query = "UPDATE recipes SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *";
-        const result = await db.query(query, [status, id]);
+        // 1. Update status resep
+        const queryUpdate = `
+            UPDATE recipes 
+            SET status = $1, rejection_reason = $2, updated_at = NOW() 
+            WHERE id = $3 
+            RETURNING *
+        `;
+        const finalReason = status === 'rejected' ? reason : null;
+        const result = await db.query(queryUpdate, [status, finalReason, id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ message: "Resep tidak ditemukan" });
         }
 
-        // 3. Pesan custom agar Admin tahu apakah resep diterima atau ditolak
-        const successMessage = status === 'approved' 
-            ? "Resep telah disetujui dan sekarang tampil di feed publik. ✅" 
-            : "Resep telah ditolak dan tidak akan muncul di feed publik. ❌";
+        const recipe = result.rows[0];
+
+        // 2. BUAT NOTIFIKASI OTOMATIS
+        const notifMessage = status === 'approved' 
+            ? `Selamat! Resep "${recipe.title}" kamu telah disetujui. 🎉` 
+            : `Maaf, resep "${recipe.title}" kamu ditolak. Alasan: ${reason} ❌`;
+
+        await db.query(
+            `INSERT INTO notifications (user_id, recipe_id, message) VALUES ($1, $2, $3)`,
+            [recipe.user_id, recipe.id, notifMessage]
+        );
 
         res.status(200).json({ 
-            message: successMessage, 
-            recipe: result.rows[0] 
+            message: "Validasi berhasil dan notifikasi telah dikirim ke user.", 
+            recipe 
         });
+
     } catch (error) {
-        console.error('Error Validasi Admin:', error.message);
-        res.status(500).json({ message: "Gagal memproses validasi resep" });
+        console.error('Error Validasi & Notif:', error.message);
+        res.status(500).json({ message: "Gagal memproses validasi" });
     }
 };
 
+const getNotifications = async (req, res) => {
+    const userId = req.user.id;
 
+    try {
+        const result = await db.query(
+            `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC`,
+            [userId]
+        );
+        res.status(200).json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: "Gagal mengambil notifikasi" });
+    }
+};
+const markNotificationAsRead = async (req, res) => {
+    const { id } = req.params; // ID Notifikasi yang diklik
+    const userId = req.user.id;
+
+    try {
+        const result = await db.query(
+            'UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2 RETURNING *',
+            [id, userId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "Notifikasi tidak ditemukan" });
+        }
+
+        res.status(200).json({ message: "Notifikasi telah dibaca" });
+    } catch (error) {
+        console.error('Error Mark Read:', error.message);
+        res.status(500).json({ message: "Gagal memperbarui status notifikasi" });
+    }
+};
 module.exports = { 
     createRecipe, 
     getAllRecipes,
@@ -825,5 +891,7 @@ module.exports = {
     updateCategory,
     deleteCategory,
     getPendingRecipes, 
-    verifyRecipe
+    verifyRecipe,
+    getNotifications,
+    markNotificationAsRead
 };

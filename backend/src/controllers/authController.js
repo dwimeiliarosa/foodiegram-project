@@ -146,10 +146,88 @@ const getProfile = async (req, res) => {
     }
 };
 
-// Export semua fungsi agar bisa digunakan di routes
+// --- FUNGSI UPDATE PROFILE (TEXT DATA) ---
+const updateProfile = async (req, res) => {
+    const { username, bio } = req.body;
+    const userId = req.user.id; // Diambil dari middleware authenticateToken
+
+    try {
+        const result = await db.query(
+            'UPDATE users SET username = $1, bio = $2 WHERE id = $3 RETURNING id, username, email, bio, photo_profile',
+            [username, bio, userId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "User tidak ditemukan" });
+        }
+
+        res.json({
+            message: "Profil FoodieGram kamu berhasil diperbarui! ✨",
+            user: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Update Profile Error:', error.message);
+        res.status(500).json({ message: "Gagal memperbarui profil" });
+    }
+};
+
+// --- FUNGSI UPDATE AVATAR (PHOTO PROFILE TO MINIO) ---
+const updateAvatar = async (req, res) => {
+    const userId = req.user.id;
+
+    if (!req.file) {
+        return res.status(400).json({ message: 'Pilih foto terlebih dahulu' });
+    }
+
+    try {
+        // req.file.url didapat dari middleware uploadAndResize
+        const photoUrl = req.file.url;
+
+        const result = await db.query(
+            'UPDATE users SET photo_profile = $1 WHERE id = $2 RETURNING photo_profile',
+            [photoUrl, userId]
+        );
+
+        res.json({
+            message: "Foto profil berhasil diperbarui! 📸",
+            photo_profile: result.rows[0].photo_profile
+        });
+    } catch (error) {
+        console.error('Update Avatar Error:', error.message);
+        res.status(500).json({ message: "Gagal mengunggah foto profil" });
+    }
+};
+// --- FUNGSI DELETE HANYA FOTO PROFIL ---
+const deletePhotoProfile = async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        // 1. Set kolom photo_profile menjadi null di database
+        const result = await db.query(
+            'UPDATE users SET photo_profile = NULL WHERE id = $1 RETURNING id, username, photo_profile',
+            [userId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "User tidak ditemukan" });
+        }
+
+        res.json({ 
+            message: "Foto profil berhasil dihapus! Sekarang kembali ke tampilan default. ✨",
+            user: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Delete Photo Error:', error.message);
+        res.status(500).json({ message: "Gagal menghapus foto profil" });
+    }
+};
+
 module.exports = { 
     register, 
     login,
     refreshToken,
-    getProfile 
+    getProfile,
+    updateProfile,
+    updateAvatar,
+    deletePhotoProfile 
 };
