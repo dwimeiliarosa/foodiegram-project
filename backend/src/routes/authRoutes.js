@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { register, login, getProfile, refreshToken } = require('../controllers/authController');
+const { register, login, getProfile, refreshToken, updateProfile, updateAvatar,deletePhotoProfile } = require('../controllers/authController');
 const authenticateToken = require('../middleware/authMiddleware');
 const { upload, uploadAndResize } = require('../middleware/uploadMiddleware');
 
@@ -155,5 +155,76 @@ router.post('/upload-test', authenticateToken, upload.single('image'), uploadAnd
         mimetype: req.file.mimetype
     });
 });
+
+/**
+ * @swagger
+ * /api/auth/update-profile:
+ *   put:
+ *     summary: Update data teks profil (username & bio)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: Dwi Meilia Rosa
+ *               bio:
+ *                 type: string
+ *                 example: Backend Developer at PT Micro Data Indonesia.
+ *     responses:
+ *       200:
+ *         description: Profil berhasil diperbarui
+ *       401:
+ *         description: Token tidak valid
+ */
+router.put('/update-profile', authenticateToken, updateProfile);
+
+/**
+ * @swagger
+ * /api/auth/update-avatar:
+ *   put:
+ *     summary: Update foto profil ke MinIO
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Pilih file gambar untuk avatar.
+ *     responses:
+ *       200:
+ *         description: Foto profil berhasil diperbarui
+ *       400:
+ *         description: Tidak ada file yang diunggah
+ */
+router.put('/update-avatar', authenticateToken, upload.single('image'), uploadAndResize, updateAvatar);
+
+/**
+ * @swagger
+ * /api/auth/delete-photo:
+ *   delete:
+ *     summary: Menghapus foto profil (set ke default/null)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Foto profil berhasil dihapus
+ *       404:
+ *         description: User tidak ditemukan
+ */
+router.delete('/delete-photo', authenticateToken, deletePhotoProfile);
 
 module.exports = router;
