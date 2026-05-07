@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 const ManageRecipes = () => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ const ManageRecipes = () => {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -64,50 +66,54 @@ const ManageRecipes = () => {
   };
 
   const fetchRecipes = async () => {
-    setIsLoadingData(true);
-    try {
-      const response = await api.get("/recipes/my-recipes");
-      const data = response.data.recipes || response.data;
-      if (Array.isArray(data)) {
-        setRecipes(data.map((r: any) => ({
-          ...r,
-          displayImage: r.image_url || "https://ui-avatars.com/api/?name=Recipe",
-        })));
-      }
-    } catch (error) { toast.error("Gagal mengambil daftar resep."); }
-    finally { setIsLoadingData(false); }
-  };
+  setIsLoadingData(true);
+  try {
+    // Jalur 1: Ambil data publik (Approved)
+    const resPublic = await api.get("/recipes");
+    const publicData = resPublic.data.recipes || resPublic.data.data || resPublic.data;
+
+    // Jalur 2: Ambil data antrean (Pending)
+    const resPending = await api.get("/recipes/admin/pending");
+    const pendingData = resPending.data.recipes || resPending.data.data || resPending.data;
+
+    // Jalur 3: (Penting!) Gabungkan semuanya
+    const allData = [
+      ...(Array.isArray(publicData) ? publicData : []),
+      ...(Array.isArray(pendingData) ? pendingData : [])
+    ];
+
+    // Hilangkan duplikat agar data tetap bersih
+    const uniqueData = Array.from(new Map(allData.map(item => [item.id, item])).values());
+
+    setRecipes(uniqueData.map((r: any) => ({
+      ...r,
+      // Pastikan status dibaca dengan benar untuk filter frontend
+      status: r.status?.toLowerCase() || 'pending',
+      displayImage: r.image_url || "https://ui-avatars.com/api/?name=Recipe",
+    })));
+
+  } catch (error) {
+    console.error("Fetch Error:", error);
+    toast.error("Gagal sinkronisasi data.");
+  } finally {
+    setIsLoadingData(false);
+  }
+};
 
   useEffect(() => { fetchCats(); fetchRecipes(); }, []);
 
   // --- FUNGSI VERIFIKASI (APPROVE & REJECT) ---
-  const handleVerify = async (id: number, status: string, message?: string) => {
-  // Jika reject dan belum ada pesan, buka modal dulu
-  if (status === 'rejected' && !message) {
-    setRejectId(id);
-    setIsRejectModalOpen(true);
-    return;
-  }
-
-  const toastId = toast.loading("Memproses validasi..."); 
-  
+  const handleVerify = async (id: string, status: 'approved' | 'rejected') => {
   try {
-    // Sesuai Swagger: PATCH /api/recipes/admin/verify/{id}
-    const response = await api.patch(`/recipes/admin/verify/${id}`, { 
-      status,
-      message: message || (status === 'approved' ? "Resep disetujui" : "") 
-    });
+    await api.patch(`/recipes/admin/verify/${id}`, { status });
+    toast.success(`Resep berhasil di-${status}`);
+
+    // UPDATE LOKAL: Supaya resep tetap ada di tabel meski backend menyembunyikannya
+    setRecipes((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
     
-    toast.success("Berhasil!", {
-      id: toastId,
-      description: response.data.message || `Resep telah di-${status}`,
-    });
-    
-    setIsRejectModalOpen(false);
-    setRejectReason("");
-    fetchRecipes(); 
-  } catch (error: any) {
-    toast.error("Gagal memvalidasi", { id: toastId });
+    window.dispatchEvent(new Event("recipeUpdated"));
+  } catch (error) {
+    toast.error("Gagal verifikasi");
   }
 };
 
@@ -166,6 +172,13 @@ const ManageRecipes = () => {
     } catch (error) { toast.error("Gagal menyimpan."); }
     finally { setIsSubmitting(false); }
   };
+
+  const filteredRecipes = recipes.filter((r: any) => {
+  // Jika filterStatus 'all', tampilkan semua. Jika tidak, cocokkan statusnya.
+  const matchesStatus = filterStatus === "all" ? true : r.status === filterStatus;
+  const matchesSearch = r.title?.toLowerCase().includes(searchQuery.toLowerCase());
+  return matchesStatus && matchesSearch;
+});
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-800">
@@ -277,6 +290,23 @@ const ManageRecipes = () => {
   </DialogContent>
 </Dialog>
 
+<div className="flex gap-2 mb-4">
+  {['all', 'pending', 'approved', 'rejected'].map((status) => (
+    <button
+      key={status}
+      onClick={() => setFilterStatus(status)}
+      className={cn(
+        "px-4 py-1.5 rounded-full text-xs font-medium transition-all",
+        filterStatus === status 
+          ? "bg-[#F27F22] text-white" 
+          : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+      )}
+    >
+      {status.toUpperCase()}
+    </button>
+  ))}
+</div>
+
         <div className="bg-white rounded-xl border overflow-hidden">
           <Table>
             <TableHeader><TableRow><TableHead>Foto</TableHead><TableHead>Judul</TableHead><TableHead>Status</TableHead><TableHead>Keterangan</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
@@ -287,12 +317,22 @@ const ManageRecipes = () => {
                 <TableRow key={r.id}>
                   <TableCell><img src={r.displayImage} className="w-10 h-10 rounded object-cover border" /></TableCell>
                   <TableCell className="font-medium">{r.title}</TableCell>
-                  <TableCell><Badge className={r.status === 'approved' ? "bg-green-100 text-green-700" : r.status === 'rejected' ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}>{r.status || 'pending'}</Badge></TableCell>
                   <TableCell>
-  <span className="text-xs text-slate-500 italic">
-    {r.status === 'rejected' ? (r.message || r.rejection_reason || "Tanpa alasan") : "-"}
-  </span>
-</TableCell>
+                    <Badge 
+                      variant={r.status === 'rejected' ? 'destructive' : 'outline'}
+                      className={cn(
+                        r.status === 'approved' && "bg-green-100 text-green-700 border-green-200",
+                        r.status === 'pending' && "bg-amber-100 text-amber-700 border-amber-200"
+                      )}
+                    >
+                      {r.status?.toUpperCase() || 'PENDING'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-xs text-slate-500 italic">
+                      {r.status === 'rejected' ? (r.message || r.rejection_reason || "Tanpa alasan") : "-"}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       {r.status === 'pending' && (

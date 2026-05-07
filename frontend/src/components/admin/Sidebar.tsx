@@ -1,39 +1,47 @@
-import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   Utensils, 
   Tag, 
-  LogOut,
-  BellRing 
+  LogOut 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import React, { useState, useEffect } from "react";
+import api from "../../api/axios";
 
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [notif, setNotif] = useState(0);
 
-  const [notif, setNotif] = React.useState(0);
-
-  React.useEffect(() => {
-  const getPendingNotif = async () => {
+  // 1. Fungsi untuk mengambil jumlah resep pending
+  const fetchNotif = async () => {
     try {
-      const response = await api.get("/recipes/admin/all"); // Gunakan endpoint semua resep
-      const allData = response.data.recipes || response.data;
-      
-      // Filter hanya yang statusnya pending
+      const response = await api.get("/recipes");
+      const allData = response.data.recipes || response.data || [];
+      // Menghitung jumlah resep yang statusnya 'pending'
       const pendingCount = allData.filter((r: any) => r.status === 'pending').length;
       setNotif(pendingCount);
     } catch (err) {
-      console.log("Gagal ambil notif");
+      console.log("Gagal mengambil data notifikasi");
     }
   };
 
-  getPendingNotif();
-  // Opsional: Cek tiap 30 detik agar seolah-olah real-time
-  const interval = setInterval(getPendingNotif, 30000);
-  return () => clearInterval(interval);
-}, []);
+  // 2. Lifecycle untuk inisialisasi dan event listener
+  useEffect(() => {
+    fetchNotif(); // Ambil data saat komponen pertama kali muncul
+
+    // Mendengarkan sinyal "recipeUpdated" dari halaman ManageRecipes
+    window.addEventListener("recipeUpdated", fetchNotif);
+
+    // Cek otomatis setiap 1 menit untuk resep baru dari user lain
+    const interval = setInterval(fetchNotif, 60000);
+
+    return () => {
+      window.removeEventListener("recipeUpdated", fetchNotif);
+      clearInterval(interval);
+    };
+  }, []);
 
   const menuItems = [
     { 
@@ -43,9 +51,9 @@ const Sidebar = () => {
     },
     { 
       title: "Control Resep", 
-      path: "/admin/resep", // Sesuai dengan halaman yang kita kerjakan tadi
+      path: "/admin/resep", 
       icon: <Utensils size={20} />,
-      badge: notif > 0 ? notif : null, 
+      badge: notif > 0 ? notif : null, // Badge otomatis terisi jika ada pending
     },
     { 
       title: "Kategori", 
@@ -55,19 +63,16 @@ const Sidebar = () => {
   ];
 
   const handleLogout = () => {
-    const confirmLogout = window.confirm("Apakah Anda yakin ingin keluar?");
-    if (confirmLogout) {
-      // Hapus semua penanda login (Sesuaikan dengan yang dipakai di axios.ts)
+    if (window.confirm("Apakah Anda yakin ingin keluar?")) {
       localStorage.removeItem("authToken"); 
       localStorage.removeItem("userRole");
-      localStorage.removeItem("foodiegram_recipe_draft"); // Opsional: hapus draft juga
-      navigate("/login"); // Biasanya admin login di halaman login utama atau /admin/login
+      navigate("/login");
     }
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col z-50">
-      {/* Logo Section - Telur Mata Sapi Mantap! */}
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col z-50 shadow-sm">
+      {/* Logo Section */}
       <div className="p-6 flex flex-col items-center gap-2 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <div className="relative bg-orange-500 p-2 rounded-xl text-white shadow-lg shadow-orange-200">
@@ -86,7 +91,6 @@ const Sidebar = () => {
       {/* Navigation Links */}
       <nav className="flex-1 p-4 space-y-2 mt-4">
         {menuItems.map((item) => {
-          // Logic isActive: biar menyala walau ada sub-path
           const isActive = location.pathname.startsWith(item.path);
           
           return (
@@ -94,7 +98,7 @@ const Sidebar = () => {
               key={item.path}
               to={item.path}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group",
+                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative",
                 isActive
                   ? "bg-[#F27F22] text-white shadow-md shadow-orange-100"
                   : "text-slate-500 hover:bg-orange-50 hover:text-[#F27F22]"
@@ -106,24 +110,36 @@ const Sidebar = () => {
               )}>
                 {item.icon}
               </span>
-              <span className="font-medium">{item.title}</span>
+              <span className="font-medium flex-1">{item.title}</span>
+              
+              {/* Menampilkan Badge Notifikasi */}
+              {item.badge && (
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-[10px] font-bold transition-all",
+                  isActive 
+                    ? "bg-white text-[#F27F22]" 
+                    : "bg-red-500 text-white animate-pulse"
+                )}>
+                  {item.badge}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
 
-      {/* Profile Admin Singkat (Opsional - Biar makin pro) */}
+      {/* Profile Admin */}
       <div className="px-6 py-4 bg-slate-50 mx-4 rounded-xl mb-2 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-[#F27F22] text-white flex items-center justify-center text-xs font-bold">
+        <div className="w-8 h-8 rounded-full bg-[#F27F22] text-white flex items-center justify-center text-xs font-bold shadow-sm">
           F
         </div>
         <div className="overflow-hidden">
           <p className="text-xs font-bold text-slate-800 truncate">Finkan Agustina</p>
-          <p className="text-[10px] text-slate-400">Frontend Admin</p>
+          <p className="text-[10px] text-slate-400 font-medium">Frontend Admin</p>
         </div>
       </div>
 
-      {/* Footer / Logout */}
+      {/* Logout Button */}
       <div className="p-4 border-t border-slate-100">
         <button
           onClick={handleLogout}
