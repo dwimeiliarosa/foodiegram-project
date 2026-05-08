@@ -4,33 +4,25 @@ const { recipeSchema } = require('../utils/validation');
 const { minioClient } = require('../config/minio');
 
 // --- FUNGSI 1: MEMBUAT RESEP ---
+// --- FUNGSI 1: MEMBUAT RESEP ---
 const createRecipe = async (req, res) => {
-    // 2. VALIDASI DATA DULU (Sebelum proses apapun)
-    // Di dalam createRecipe
-const { error, value } = recipeSchema.validate(req.body);
+    // 2. VALIDASI DATA DULU
+    const { error, value } = recipeSchema.validate(req.body);
 
-if (error) {
-    // RETURN sangat penting agar kode di bawahnya tidak dijalankan!
-    return res.status(400).json({ 
-        message: "Data tidak valid", 
-        detail: error.details[0].message 
-    });
-}
+    if (error) {
+        return res.status(400).json({ 
+            message: "Data tidak valid", 
+            detail: error.details[0].message 
+        });
+    }
 
-    // 3. GUNAKAN 'value' HASIL VALIDASI (Agar data bersih)
     const { 
-        title, 
-        category_id, 
-        ingredients, 
-        steps, 
-        cooking_time, 
-        protein, 
-        carbs, 
-        fat,
-        post_type 
-    } = value; // Mengambil dari 'value' yang sudah divalidasi Joi
+        title, category_id, ingredients, steps, 
+        cooking_time, protein, carbs, fat, post_type 
+    } = value;
     
     const userId = req.user.id;
+    const username = req.user.username; // Pastikan middleware auth menyertakan username
 
     let imageUrl = null;
     let videoUrl = null;
@@ -48,6 +40,7 @@ if (error) {
             ? ingredients 
             : ingredients.split(',').map(item => item.trim());
 
+        // 1. Simpan Resep Baru
         const query = `
             INSERT INTO recipes (
                 user_id, category_id, title, post_type, image_url, video_url,
@@ -64,11 +57,33 @@ if (error) {
         ];
 
         const result = await db.query(query, values);
+        const newRecipe = result.rows[0];
+
+        // 2. LOGIKA BARU: NOTIFIKASI KE ADMIN
+        // Cari semua user yang memiliki role admin (asumsi ada kolom role di tabel users kamu)
+        const adminQuery = `SELECT id FROM users WHERE role = 'admin'`;
+        const admins = await db.query(adminQuery);
+
+        if (admins.rows.length > 0) {
+            // Siapkan pesan notifikasi
+            const adminMessage = `Resep baru: "${title}" oleh @${username} menunggu validasi.`;
+            
+            // Masukkan notifikasi untuk setiap admin yang ditemukan
+            const notifPromises = admins.rows.map(admin => {
+                return db.query(
+                    `INSERT INTO notifications (user_id, recipe_id, message) VALUES ($1, $2, $3)`,
+                    [admin.id, newRecipe.id, adminMessage]
+                );
+            });
+            
+            await Promise.all(notifPromises);
+        }
 
         res.status(201).json({
-            message: 'Resep FoodieGram berhasil dipublish! 🥗',
-            recipe: result.rows[0]
+            message: 'Resep FoodieGram berhasil dipublish! Menunggu validasi admin. 🥗',
+            recipe: newRecipe
         });
+
     } catch (error) {
         console.error('Error saat simpan resep:', error.message);
         res.status(500).json({ message: 'Gagal mempublish resep' });
@@ -162,6 +177,7 @@ const searchByIngredients = async (req, res) => {
 const toggleLike = async (req, res) => {
     const { recipe_id } = req.body;
     const userId = req.user.id;
+    const username = req.user.username; // Ambil username pengirim like
 
     try {
         const checkLike = await db.query(
@@ -170,20 +186,31 @@ const toggleLike = async (req, res) => {
         );
 
         if (checkLike.rows.length > 0) {
-            await db.query(
-                'DELETE FROM likes WHERE user_id = $1 AND recipe_id = $2',
-                [userId, recipe_id]
-            );
+            await db.query('DELETE FROM likes WHERE user_id = $1 AND recipe_id = $2', [userId, recipe_id]);
             return res.status(200).json({ message: 'Unlike berhasil' });
         } else {
-            await db.query(
-                'INSERT INTO likes (user_id, recipe_id) VALUES ($1, $2)',
-                [userId, recipe_id]
-            );
+            // 1. Simpan Like
+            await db.query('INSERT INTO likes (user_id, recipe_id) VALUES ($1, $2)', [userId, recipe_id]);
+
+            // 2. LOGIKA NOTIFIKASI: Cari tahu siapa pemilik resepnya
+            const recipeOwner = await db.query('SELECT user_id, title FROM recipes WHERE id = $1', [recipe_id]);
+            
+            if (recipeOwner.rows.length > 0) {
+                const ownerId = recipeOwner.rows[0].user_id;
+                const recipeTitle = recipeOwner.rows[0].title;
+
+                // Jangan beri notif jika yang like adalah pemiliknya sendiri
+                if (ownerId !== userId) {
+                    const message = `@${username} menyukai resep kamu: "${recipeTitle}" ❤️`;
+                    await db.query(
+                        'INSERT INTO notifications (user_id, recipe_id, message) VALUES ($1, $2, $3)',
+                        [ownerId, recipe_id, message]
+                    );
+                }
+            }
             return res.status(201).json({ message: 'Like berhasil ❤️' });
         }
     } catch (error) {
-        console.error('Error Toggle Like:', error.message);
         res.status(500).json({ message: 'Gagal memproses Like' });
     }
 };
@@ -192,6 +219,7 @@ const toggleLike = async (req, res) => {
 const toggleSave = async (req, res) => {
     const { recipe_id } = req.body;
     const userId = req.user.id;
+    const username = req.user.username; // Pastikan middleware auth menyertakan username
 
     try {
         const checkSave = await db.query(
@@ -200,16 +228,41 @@ const toggleSave = async (req, res) => {
         );
 
         if (checkSave.rows.length > 0) {
+            // Logika Unsave: Hapus dari tabel saves
             await db.query(
                 'DELETE FROM saves WHERE user_id = $1 AND recipe_id = $2',
                 [userId, recipe_id]
             );
             return res.status(200).json({ message: 'Resep berhasil dihapus dari simpanan' });
         } else {
+            // 1. Simpan Resep ke tabel saves
             await db.query(
                 'INSERT INTO saves (user_id, recipe_id) VALUES ($1, $2)',
                 [userId, recipe_id]
             );
+
+            // 2. LOGIKA NOTIFIKASI: Beritahu pemilik resep
+            // Ambil info pemilik resep dan judul resepnya
+            const recipeInfo = await db.query(
+                'SELECT user_id, title FROM recipes WHERE id = $1', 
+                [recipe_id]
+            );
+
+            if (recipeInfo.rows.length > 0) {
+                const ownerId = recipeInfo.rows[0].user_id;
+                const recipeTitle = recipeInfo.rows[0].title;
+
+                // Kirim notifikasi hanya jika yang menyimpan resep BUKAN pemiliknya sendiri
+                if (ownerId !== userId) {
+                    const message = `@${username} menyimpan resep kamu: "${recipeTitle}" 🔖`;
+                    
+                    await db.query(
+                        'INSERT INTO notifications (user_id, recipe_id, message) VALUES ($1, $2, $3)',
+                        [ownerId, recipe_id, message]
+                    );
+                }
+            }
+
             return res.status(201).json({ message: 'Resep berhasil disimpan! 🔖' });
         }
     } catch (error) {
@@ -490,8 +543,9 @@ const updateRecipe = async (req, res) => {
 
 // --- FUNGSI 10: FOLLOW / UNFOLLOW USER (Baru) ---
 const toggleFollow = async (req, res) => {
-    const { following_id } = req.body; // ID user yang mau difollow
-    const follower_id = req.user.id;   // ID kamu (dari token)
+    const { following_id } = req.body; // ID orang yang mau diikuti
+    const follower_id = req.user.id;   // ID kamu
+    const username = req.user.username; // Nama kamu
 
     if (parseInt(following_id) === parseInt(follower_id)) {
         return res.status(400).json({ message: "Kamu tidak bisa memfollow diri sendiri" });
@@ -504,20 +558,22 @@ const toggleFollow = async (req, res) => {
         );
 
         if (checkFollow.rows.length > 0) {
-            await db.query(
-                'DELETE FROM follows WHERE follower_id = $1 AND following_id = $2',
-                [follower_id, following_id]
-            );
+            await db.query('DELETE FROM follows WHERE follower_id = $1 AND following_id = $2', [follower_id, following_id]);
             return res.status(200).json({ message: 'Unfollow berhasil' });
         } else {
+            // 1. Simpan Follow
+            await db.query('INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)', [follower_id, following_id]);
+
+            // 2. LOGIKA NOTIFIKASI: Beritahu orang yang difollow
+            const message = `@${username} mulai mengikuti kamu. 🤝`;
             await db.query(
-                'INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)',
-                [follower_id, following_id]
+                'INSERT INTO notifications (user_id, message) VALUES ($1, $2)',
+                [following_id, message] // recipe_id dikosongkan (null) karena ini urusan profil
             );
+
             return res.status(201).json({ message: 'Berhasil memfollow user ini! 🤝' });
         }
     } catch (error) {
-        console.error('Error Toggle Follow:', error.message);
         res.status(500).json({ message: 'Gagal memproses follow' });
     }
 };
