@@ -3,12 +3,19 @@ const sharp = require('sharp');
 const { minioClient } = require('../config/minio');
 require('dotenv').config();
 
-// Simpan sementara di memori
 const storage = multer.memoryStorage();
+
 const upload = multer({ 
     storage: storage,
-    // Kita naikkan limitnya ke 20MB supaya bisa menampung video pendek (reels)
-    limits: { fileSize: 20 * 1024 * 1024 }, 
+    limits: { fileSize: 50 * 1024 * 1024 }, // Naikkan ke 50MB agar lebih aman untuk video
+    fileFilter: (req, file, cb) => {
+        // Izinkan gambar dan video
+        if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Hanya diperbolehkan mengupload gambar atau video!'), false);
+        }
+    }
 });
 
 const uploadAndResize = async (req, res, next) => {
@@ -18,7 +25,7 @@ const uploadAndResize = async (req, res, next) => {
     const timestamp = Date.now();
     
     try {
-        // --- LOGIKA 1: JIKA YANG DIUPLOAD ADALAH VIDEO ---
+        // --- LOGIKA 1: JIKA VIDEO ---
         if (req.file.mimetype.startsWith('video/')) {
             const fileName = `videos/${timestamp}-${originalName}`;
             
@@ -26,16 +33,15 @@ const uploadAndResize = async (req, res, next) => {
                 process.env.MINIO_BUCKET,
                 fileName,
                 req.file.buffer,
-                req.file.size,
+                req.file.size, // Gunakan size asli untuk video
                 { 'Content-Type': req.file.mimetype }
             );
 
-            // Simpan URL Video ke req.file.url
             req.file.url = `http://${process.env.MINIO_ENDPOINT}:${process.env.MINIO_PORT}/${process.env.MINIO_BUCKET}/${fileName}`;
-            return next(); // Langsung lanjut, tidak lewat Sharp
+            return next();
         }
 
-        // --- LOGIKA 2: JIKA YANG DIUPLOAD ADALAH GAMBAR (Pakai Sharp) ---
+        // --- LOGIKA 2: JIKA GAMBAR ---
         const fileName = `recipes/${timestamp}-${originalName}.webp`;
 
         const optimizedBuffer = await sharp(req.file.buffer)
@@ -51,9 +57,7 @@ const uploadAndResize = async (req, res, next) => {
             { 'Content-Type': 'image/webp' }
         );
 
-        // Simpan URL Gambar ke req.file.url
         req.file.url = `http://${process.env.MINIO_ENDPOINT}:${process.env.MINIO_PORT}/${process.env.MINIO_BUCKET}/${fileName}`;
-        
         next();
     } catch (error) {
         console.error('Upload Error:', error.message);

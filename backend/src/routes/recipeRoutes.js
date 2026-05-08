@@ -3,6 +3,7 @@ const router = express.Router();
 
 const { 
     getRecipeFeed,
+    getFollowingFeed,
     getTrendingRecipes,
     createRecipe, 
     getAllRecipes, 
@@ -24,7 +25,10 @@ const {
     updateCategory,
     deleteCategory,
     getPendingRecipes, 
-    verifyRecipe
+    verifyRecipe,
+    getNotifications,
+    markNotificationAsRead
+
 } = require('../controllers/recipeController');
 
 const authenticateToken = require('../middleware/authMiddleware');
@@ -102,6 +106,33 @@ router.get('/', authenticateToken, getAllRecipes);
  *         description: Berhasil mengambil feed
  */
 router.get('/feed', authenticateToken, getRecipeFeed);
+
+/**
+ * @swagger
+ * /api/recipes/following-feed:
+ *   get:
+ *     summary: Mendapatkan resep terbaru khusus dari orang yang diikuti (Social Feed)
+ *     tags: [Recipe Discovery]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil feed following
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 count:
+ *                   type: integer
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ */
+router.get('/following-feed', authenticateToken, getFollowingFeed);
 
 /**
  * @swagger
@@ -430,6 +461,84 @@ router.post('/save', authenticateToken, toggleSave);
  */
 router.post('/follow', authenticateToken, toggleFollow);
 
+/**
+ * @swagger
+ * /api/recipes/notifications:
+ *   get:
+ *     summary: Mendapatkan semua notifikasi milik user
+ *     description: Mengambil daftar pesan sistem terkait status resep (diterima/ditolak) untuk user yang sedang login.
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil daftar notifikasi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                     example: 10
+ *                   user_id:
+ *                     type: integer
+ *                     example: 5
+ *                   recipe_id:
+ *                     type: integer
+ *                     example: 102
+ *                   message:
+ *                     type: string
+ *                     example: "Selamat! Resep 'Nasi Goreng Spesial' kamu telah disetujui. 🎉"
+ *                   is_read:
+ *                     type: boolean
+ *                     example: false
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *                     example: "2026-05-07T11:20:00Z"
+ *       401:
+ *         description: Unauthorized - Token tidak valid atau sesi berakhir
+ *       500:
+ *         description: Server Error - Gagal mengambil data dari database
+ */
+router.get('/notifications', authenticateToken, getNotifications);
+
+/**
+ * @swagger
+ * /api/recipes/notifications/{id}/read:
+ *   put:
+ *     summary: Menandai satu notifikasi sebagai sudah dibaca
+ *     description: Mengubah status 'is_read' menjadi true agar tidak muncul lagi sebagai notifikasi baru di ikon lonceng.
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID unik dari notifikasi
+ *     responses:
+ *       200:
+ *         description: Berhasil memperbarui status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Notifikasi telah dibaca"
+ *       404:
+ *         description: Notifikasi tidak ditemukan atau bukan milik user tersebut
+ *       500:
+ *         description: Server Error
+ */
+router.put('/notifications/:id/read', authenticateToken, markNotificationAsRead);
 
 /**
  * @swagger
@@ -521,6 +630,7 @@ router.get('/admin/pending', authenticateToken, adminOnly, getPendingRecipes);
  * /api/recipes/admin/verify/{id}:
  *   patch:
  *     summary: Menyetujui atau menolak resep (Admin Only)
+ *     description: Moderator dapat menyetujui atau menolak resep. Jika ditolak, alasan (reason) wajib diisi agar user tahu kesalahannya.
  *     tags: [Admin Section]
  *     security:
  *       - bearerAuth: []
@@ -530,26 +640,43 @@ router.get('/admin/pending', authenticateToken, adminOnly, getPendingRecipes);
  *         required: true
  *         schema:
  *           type: integer
+ *         description: ID Resep yang akan diverifikasi
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [status]
+ *             required:
+ *               - status
  *             properties:
  *               status:
  *                 type: string
  *                 enum: [approved, rejected]
- *                 description: Pilih 'approved' untuk mempublikasikan atau 'rejected' untuk menolak.
+ *                 description: Status verifikasi resep.
  *                 example: "rejected"
+ *               reason:
+ *                 type: string
+ *                 description: Alasan jika resep ditolak (Wajib diisi jika status = rejected).
+ *                 example: "Foto kurang jelas dan bahan-bahan tidak lengkap."
  *     responses:
  *       200:
- *         description: Berhasil memperbarui status (Diterima/Ditolak)
+ *         description: Berhasil memperbarui status dan notifikasi telah dikirim ke user.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 recipe:
+ *                   type: object
  *       400:
- *         description: Status tidak valid (bukan approved/rejected)
+ *         description: Bad Request - Status tidak valid atau alasan penolakan tidak diisi.
  *       403:
- *         description: Akses ditolak (Bukan Admin)
+ *         description: Forbidden - Hanya Admin yang dapat mengakses endpoint ini.
+ *       404:
+ *         description: Not Found - ID Resep tidak ditemukan.
  */
 router.patch('/admin/verify/:id', authenticateToken, adminOnly, verifyRecipe);
 
