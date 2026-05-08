@@ -1,362 +1,77 @@
-import React, { useState, useEffect } from "react";
-import Sidebar from "../../components/admin/Sidebar";
-import { Plus, Loader2, Pencil, Trash2, X, Check, XCircle, Search } from "lucide-react";
-import api from "../../api/axios";
-import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
-
+import React, { useState, useEffect } from 'react';
+import api from '../../api/axios';
+import { toast } from 'react-hot-toast';
+import Sidebar from '../../components/admin/Sidebar';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const ManageRecipes = () => {
-  const navigate = useNavigate();
   const [recipes, setRecipes] = useState<any[]>([]);
-  const [availableCategories, setAvailableCategories] = useState<any[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [rejectionReason, setRejectionReason] = useState("");
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectId, setRejectId] = useState<number | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-
-  const [formData, setFormData] = useState({
-    name: "",
-    category: "",
-    image: null as File | null,
-    ingredients: [""] as string[],
-    steps: [""] as string[],
-    protein: 0,
-    carbs: 0,
-    fat: 0,
-    cooking_time: 0,
-  });
-
-  // --- LOGIKA DRAFT (FITUR AMAN) ---
-  useEffect(() => {
-    const savedDraft = localStorage.getItem("foodiegram_recipe_draft");
-    if (savedDraft && !editingRecipeId && isModalOpen) {
-      try {
-        const parsed = JSON.parse(savedDraft);
-        setFormData(prev => ({ ...prev, ...parsed, image: null }));
-      } catch (e) { console.error("Gagal pulihkan draft", e); }
-    }
-  }, [isModalOpen, editingRecipeId]);
-
-  useEffect(() => {
-    if (!editingRecipeId && (formData.name || formData.category)) {
-      localStorage.setItem("foodiegram_recipe_draft", JSON.stringify(formData));
-    }
-  }, [formData, editingRecipeId]);
-
-  const fetchCats = async () => {
-    try {
-      const res = await api.get("/recipes/categories");
-      setAvailableCategories(res.data.categories || res.data || []);
-    } catch (err) { console.error("Gagal load kategori", err); }
-  };
 
   const fetchRecipes = async () => {
-  setIsLoadingData(true);
-  try {
-    // Jalur 1: Ambil data publik (Approved)
-    const resPublic = await api.get("/recipes");
-    const publicData = resPublic.data.recipes || resPublic.data.data || resPublic.data;
-
-    // Jalur 2: Ambil data antrean (Pending)
-    const resPending = await api.get("/recipes/admin/pending");
-    const pendingData = resPending.data.recipes || resPending.data.data || resPending.data;
-
-    // Jalur 3: (Penting!) Gabungkan semuanya
-    const allData = [
-      ...(Array.isArray(publicData) ? publicData : []),
-      ...(Array.isArray(pendingData) ? pendingData : [])
-    ];
-
-    // Hilangkan duplikat agar data tetap bersih
-    const uniqueData = Array.from(new Map(allData.map(item => [item.id, item])).values());
-
-    setRecipes(uniqueData.map((r: any) => ({
-      ...r,
-      // Pastikan status dibaca dengan benar untuk filter frontend
-      status: r.status?.toLowerCase() || 'pending',
-      displayImage: r.image_url || "https://ui-avatars.com/api/?name=Recipe",
-    })));
-
-  } catch (error) {
-    console.error("Fetch Error:", error);
-    toast.error("Gagal sinkronisasi data.");
-  } finally {
-    setIsLoadingData(false);
-  }
-};
-
-  useEffect(() => { fetchCats(); fetchRecipes(); }, []);
-
-  // --- FUNGSI VERIFIKASI (APPROVE & REJECT) ---
-  const handleVerify = async (id: string, status: 'approved' | 'rejected') => {
-  try {
-    await api.patch(`/recipes/admin/verify/${id}`, { status });
-    toast.success(`Resep berhasil di-${status}`);
-
-    // UPDATE LOKAL: Supaya resep tetap ada di tabel meski backend menyembunyikannya
-    setRecipes((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
-    
-    window.dispatchEvent(new Event("recipeUpdated"));
-  } catch (error) {
-    toast.error("Gagal verifikasi");
-  }
-};
-
-  // --- FUNGSI DELETE ---
-  const handleDelete = async (id: number) => {
-    if (!window.confirm("Hapus resep ini?")) return;
     try {
-      await api.delete(`/recipes/${id}`);
-      toast.success("Resep telah dihapus");
-      fetchRecipes();
-    } catch { toast.error("Gagal menghapus resep"); }
+      const res = await api.get('/recipes/admin/all');
+      setRecipes(res.data.data || res.data);
+    } catch (error) { console.error(error); }
   };
 
-  const resetForm = () => {
-    setEditingRecipeId(null);
-    setFormData({
-      name: "", category: "", image: null,
-      ingredients: [""], steps: [""], protein: 0, carbs: 0, fat: 0, cooking_time: 0,
-    });
-  };
+  useEffect(() => { fetchRecipes(); }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.category) return toast.error("Kategori harus dipilih!");
-    setIsSubmitting(true);
+  const handleVerify = async (id: number, status: 'approved' | 'rejected') => {
     try {
-      if (editingRecipeId) {
-        // UPDATE: Sesuai Swagger Dwi (JSON)
-        const updateData = {
-          title: formData.name,
-          category_id: parseInt(formData.category), // Fix: Kirim as Integer
-          ingredients: formData.ingredients.filter(i => i.trim() !== "").join(", "),
-          steps: formData.steps.filter(s => s.trim() !== "").join(". ")
-        };
-        await api.put(`/recipes/${editingRecipeId}`, updateData);
-      } else {
-        // CREATE: Pakai FormData untuk Upload Image
-        const fd = new FormData();
-        fd.append("title", formData.name);
-        fd.append("category_id", formData.category);
-        fd.append("ingredients", formData.ingredients.filter(i => i.trim() !== "").join(", "));
-        fd.append("steps", formData.steps.filter(s => s.trim() !== "").join(". "));
-        fd.append("cooking_time", formData.cooking_time.toString());
-        fd.append("protein", formData.protein.toString());
-        fd.append("carbs", formData.carbs.toString());
-        fd.append("fat", formData.fat.toString());
-        fd.append("post_type", "photo");
-        if (formData.image) fd.append("image", formData.image);
-        await api.post("/recipes", fd);
-        localStorage.removeItem("foodiegram_recipe_draft");
-      }
-      toast.success("Berhasil!");
-      setIsModalOpen(false);
-      resetForm();
+      await api.patch(`/recipes/admin/verify/${id}`, { 
+        status, 
+        rejection_reason: status === 'rejected' ? rejectionReason : "" 
+      });
+      toast.success(`Berhasil di-${status}`);
+      setIsRejectModalOpen(false);
+      setRejectionReason("");
       fetchRecipes();
-    } catch (error) { toast.error("Gagal menyimpan."); }
-    finally { setIsSubmitting(false); }
+    } catch (error) { toast.error("Gagal verifikasi"); }
   };
 
-  const filteredRecipes = recipes.filter((r: any) => {
-  // Jika filterStatus 'all', tampilkan semua. Jika tidak, cocokkan statusnya.
-  const matchesStatus = filterStatus === "all" ? true : r.status === filterStatus;
-  const matchesSearch = r.title?.toLowerCase().includes(searchQuery.toLowerCase());
-  return matchesStatus && matchesSearch;
-});
+  const filteredRecipes = (recipes || []).filter((r: any) => {
+    const matchesSearch = r.title?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === "all" || r.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
-    <div className="flex min-h-screen w-full bg-slate-50 text-slate-800">
+    <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
-      <main className="flex-1 lg:ml-64 p-4 lg:p-8 pt-20 lg:pt-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Manajemen Resep</h1>
-            <p className="text-slate-500 text-sm">Kelola data resep FoodieGram.</p>
-          </div>
-          <div className="flex gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <Input placeholder="Cari..." className="pl-10 w-64 bg-white" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-            </div>
-            <Button className="bg-[#F27F22] hover:bg-[#d96d1a]" onClick={() => { resetForm(); setIsModalOpen(true); }}>
-              <Plus size={18} className="mr-2" /> Tambah Resep
-            </Button>
-          </div>
-        </div>
-
-        <Dialog open={isModalOpen} onOpenChange={(val) => { setIsModalOpen(val); if (!val) setEditingRecipeId(null); }}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto bg-white">
+      <main className="flex-1 lg:ml-64 p-8">
+        <h1 className="text-2xl font-bold mb-6">Manajemen Resep</h1>
+        {/* Kamu bisa masukkan tabel kamu di sini nanti */}
+        
+        <Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
+          <DialogContent className="bg-white">
             <DialogHeader>
-              <DialogTitle>{editingRecipeId ? "Edit Resep" : "Tambah Resep"}</DialogTitle>
+              <DialogTitle>Tolak Resep</DialogTitle>
+              <DialogDescription>Berikan alasan penolakan.</DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nama Resep</Label>
-                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Kategori</Label>
-                  <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
-                    <SelectTrigger className="bg-white"><SelectValue placeholder="Pilih Kategori" /></SelectTrigger>
-                    <SelectContent className="bg-white">
-                      {availableCategories.map((c: any) => (<SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="p-4 bg-slate-50 rounded-lg border">
-                <Label className="flex justify-between mb-2">Bahan <Button type="button" size="sm" variant="ghost" onClick={() => setFormData(p => ({...p, ingredients: [...p.ingredients, ""]}))}>+ Tambah</Button></Label>
-                {formData.ingredients.map((ing, i) => (
-                  <div key={i} className="flex gap-2 mb-2">
-                    <Input value={ing} onChange={(e) => { const n = [...formData.ingredients]; n[i] = e.target.value; setFormData({...formData, ingredients: n}); }} required />
-                    <Button type="button" size="icon" variant="ghost" onClick={() => setFormData(p => ({...p, ingredients: p.ingredients.filter((_, idx) => idx !== i)}))} disabled={formData.ingredients.length === 1}><X size={14} /></Button>
-                  </div>
-                ))}
-              </div>
-              <div className="p-4 bg-slate-50 rounded-lg border">
-                <Label className="flex justify-between mb-2">Langkah <Button type="button" size="sm" variant="ghost" onClick={() => setFormData(p => ({...p, steps: [...p.steps, ""]}))}>+ Tambah</Button></Label>
-                {formData.steps.map((s, i) => (
-                  <div key={i} className="flex gap-2 mb-2">
-                    <span className="mt-2 text-xs font-bold text-slate-400 w-4">{i+1}</span>
-                    <Input value={s} onChange={(e) => { const n = [...formData.steps]; n[i] = e.target.value; setFormData({...formData, steps: n}); }} required />
-                    <Button type="button" size="icon" variant="ghost" onClick={() => setFormData(p => ({...p, steps: p.steps.filter((_, idx) => idx !== i)}))} disabled={formData.steps.length === 1}><X size={14} /></Button>
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                <div><Label>Protein</Label><Input type="number" value={formData.protein} onChange={(e) => setFormData({...formData, protein: parseFloat(e.target.value) || 0})} /></div>
-                <div><Label>Karbo</Label><Input type="number" value={formData.carbs} onChange={(e) => setFormData({...formData, carbs: parseFloat(e.target.value) || 0})} /></div>
-                <div><Label>Lemak</Label><Input type="number" value={formData.fat} onChange={(e) => setFormData({...formData, fat: parseFloat(e.target.value) || 0})} /></div>
-                <div><Label>Menit</Label><Input type="number" value={formData.cooking_time} onChange={(e) => setFormData({...formData, cooking_time: parseInt(e.target.value) || 0})} /></div>
-              </div>
-              <div className="space-y-2">
-                <Label>Foto Resep</Label>
-                <Input type="file" accept="image/*" onChange={(e) => setFormData({...formData, image: e.target.files?.[0] || null})} required={!editingRecipeId} />
-              </div>
-              <Button type="submit" className="w-full bg-[#F27F22] hover:bg-[#d96d1a]" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin" /> : editingRecipeId ? "Update Resep" : "Simpan Resep"}
+            <textarea 
+              className="w-full p-2 border rounded mt-2" 
+              rows={4}
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="ghost" onClick={() => setIsRejectModalOpen(false)}>Batal</Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => rejectId && handleVerify(rejectId, 'rejected')}
+                disabled={!rejectionReason.trim()}
+              >
+                Kirim Penolakan
               </Button>
-            </form>
+            </div>
           </DialogContent>
         </Dialog>
-
-        {/* --- MODAL ALASAN REJECT --- */}
-<Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
-  <DialogContent className="sm:max-w-[425px] bg-white">
-    <DialogHeader>
-      <DialogTitle className="text-red-600">Tolak Resep</DialogTitle>
-      <DialogDescription>
-        Berikan alasan mengapa resep ini ditolak agar penulis bisa memperbaikinya.
-      </DialogDescription>
-    </DialogHeader>
-    <div className="py-4">
-      <Label htmlFor="reason">Alasan Penolakan</Label>
-      <textarea
-        id="reason"
-        className="w-full mt-2 p-3 border rounded-md text-sm focus:ring-[#F27F22] focus:border-[#F27F22]"
-        placeholder="Contoh: Foto kurang jelas atau langkah memasak tidak lengkap..."
-        rows={4}
-        value={rejectReason}
-        onChange={(e) => setRejectReason(e.target.value)}
-      />
-    </div>
-    <div className="flex justify-end gap-3">
-      <Button variant="ghost" onClick={() => setIsRejectModalOpen(false)}>Batal</Button>
-      <Button 
-        className="bg-red-600 hover:bg-red-700 text-white"
-        disabled={!rejectReason.trim()}
-        onClick={() => rejectId && handleVerify(rejectId, 'rejected', rejectReason)}
-      >
-        Kirim Penolakan
-      </Button>
-    </div>
-  </DialogContent>
-</Dialog>
-
-<div className="flex gap-2 mb-4">
-  {['all', 'pending', 'approved', 'rejected'].map((status) => (
-    <button
-      key={status}
-      onClick={() => setFilterStatus(status)}
-      className={cn(
-        "px-4 py-1.5 rounded-full text-xs font-medium transition-all",
-        filterStatus === status 
-          ? "bg-[#F27F22] text-white" 
-          : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-      )}
-    >
-      {status.toUpperCase()}
-    </button>
-  ))}
-</div>
-
-        <div className="bg-white rounded-xl border overflow-hidden">
-          <Table>
-            <TableHeader><TableRow><TableHead>Foto</TableHead><TableHead>Judul</TableHead><TableHead>Status</TableHead><TableHead>Keterangan</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {isLoadingData ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-[#F27F22]" /></TableCell></TableRow>
-              ) : recipes.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase())).map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell><img src={r.displayImage} className="w-10 h-10 rounded object-cover border" /></TableCell>
-                  <TableCell className="font-medium">{r.title}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={r.status === 'rejected' ? 'destructive' : 'outline'}
-                      className={cn(
-                        r.status === 'approved' && "bg-green-100 text-green-700 border-green-200",
-                        r.status === 'pending' && "bg-amber-100 text-amber-700 border-amber-200"
-                      )}
-                    >
-                      {r.status?.toUpperCase() || 'PENDING'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-xs text-slate-500 italic">
-                      {r.status === 'rejected' ? (r.message || r.rejection_reason || "Tanpa alasan") : "-"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      {r.status === 'pending' && (
-                        <><Button size="icon" variant="ghost" className="text-green-600" onClick={() => handleVerify(r.id, 'approved')}><Check size={18} /></Button>
-                        <Button size="icon" variant="ghost" className="text-red-500" onClick={() => handleVerify(r.id, 'rejected')}><XCircle size={18} /></Button></>
-                      )}
-                      <Button size="icon" variant="ghost" onClick={() => {
-                        setEditingRecipeId(r.id);
-                        setFormData({
-                          name: r.title, category: r.category_id?.toString() || "", image: null,
-                          ingredients: Array.isArray(r.ingredients) ? r.ingredients : (r.ingredients?.split(", ") || [""]),
-                          steps: typeof r.steps === "string" ? r.steps.split(". ") : [""] ,
-                          protein: r.protein || 0, carbs: r.carbs || 0, fat: r.fat || 0, cooking_time: r.cooking_time || 0,
-                        });
-                        setIsModalOpen(true);
-                      }}><Pencil size={16} /></Button>
-                      <Button size="icon" variant="ghost" className="text-red-500" onClick={() => handleDelete(r.id)}><Trash2 size={16} /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
       </main>
     </div>
   );
