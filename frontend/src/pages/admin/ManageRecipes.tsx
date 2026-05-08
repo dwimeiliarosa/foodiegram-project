@@ -107,19 +107,25 @@ const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => { fetchCats(); fetchRecipes(); }, []);
 
-  const handleVerify = async (id: number | string, status: 'approved' | 'rejected') => {
+  const handleVerify = async (id: number, status: 'approved' | 'rejected') => {
   try {
-    await api.patch(`/recipes/admin/verify/${id}`, { 
-      status,
-      rejection_reason: status === 'rejected' ? rejectReason : "" 
-    });
+    const payload = {
+      status, 
+      // GANTI DARI rejection_reason MENJADI reason SESUAI SWAGGER
+      reason: status === 'rejected' ? rejectReason : "" 
+    };
+
+    console.log("Mengirim data ke API:", payload);
+
+    await api.patch(`/recipes/admin/verify/${id}`, payload);
     
     toast.success(`Resep berhasil di-${status}`);
     setIsRejectModalOpen(false);
-    setRejectReason("");
-    fetchRecipes(); // Panggil ini supaya tabel update otomatis
-  } catch (error) {
-    toast.error("Gagal verifikasi");
+    setRejectReason(""); 
+    fetchRecipes();
+  } catch (error: any) {
+    console.error("Detail Error:", error.response?.data);
+    toast.error(error.response?.data?.message || "Gagal verifikasi");
   }
 };
 
@@ -194,7 +200,11 @@ const [searchTerm, setSearchTerm] = useState("");
 
   const filteredRecipes = (recipes || []).filter((recipe: any) => {
   const matchesSearch = recipe.title?.toLowerCase().includes(searchTerm.toLowerCase());
-  const matchesStatus = filterStatus === "all" || recipe.status === filterStatus;
+  
+  const matchesStatus = filterStatus === "all" 
+    ? recipe.status !== "rejected" 
+    : recipe.status === filterStatus;
+    
   return matchesSearch && matchesStatus;
 });
 
@@ -311,21 +321,21 @@ const [searchTerm, setSearchTerm] = useState("");
         </Dialog>
 
         <div className="flex gap-2 mb-4">
-        {['all', 'pending', 'approved', 'rejected'].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilterStatus(status)}
-            className={cn(
-              "px-4 py-1.5 rounded-full text-xs font-medium transition-all",
-              filterStatus === status
-                ? "bg-[#F27F22] text-white"
-                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-            )}
-          >
-            {status.toUpperCase()}
-          </button>
-        ))}
-      </div>
+          {['all', 'pending', 'approved'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(status)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-xs font-medium transition-all",
+                filterStatus === status
+                  ? "bg-[#F27F22] text-white"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              )}
+            >
+              {status.toUpperCase()}
+            </button>
+          ))}
+        </div>
 
         <div className="bg-white rounded-xl border overflow-hidden">
           <Table>
@@ -334,7 +344,6 @@ const [searchTerm, setSearchTerm] = useState("");
                 <TableHead>Foto</TableHead>
                 <TableHead>Judul</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Keterangan</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -359,11 +368,7 @@ const [searchTerm, setSearchTerm] = useState("");
                         {r.status?.toUpperCase()}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-slate-500 italic">
-                        {r.status === 'rejected' ? (r.message || r.rejection_reason || "Tanpa alasan") : "-"}
-                      </span>
-                    </TableCell>
+                    
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
                         {r.status === "pending" && (
@@ -371,7 +376,7 @@ const [searchTerm, setSearchTerm] = useState("");
                             <Button size="sm" className="bg-green-600 h-8" onClick={() => handleVerify(r.id, 'approved')}>
                               <Check className="w-4 h-4 mr-1" /> Approve
                             </Button>
-                            <Button size="sm" variant="destructive" className="h-8" onClick={() => handleVerify(r.id, 'rejected')}>
+                            <Button size="sm" variant="destructive" className="h-8" onClick={() => { setRejectId(r.id); setIsRejectModalOpen(true); }}>
                               <XCircle className="w-4 h-4 mr-1" /> Reject
                             </Button>
                           </>
