@@ -3,7 +3,7 @@ import Sidebar from "../../components/admin/Sidebar";
 import { Plus, Loader2, Pencil, Trash2, X, Check, XCircle, Search } from "lucide-react";
 import api from "../../api/axios";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,13 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 
 const ManageRecipes = () => {
-  const navigate = useNavigate();
 const [recipes, setRecipes] = useState<any[]>([]);
 const [availableCategories, setAvailableCategories] = useState<any[]>([]);
 const [isSubmitting, setIsSubmitting] = useState(false);
 const [isModalOpen, setIsModalOpen] = useState(false);
 const [isLoadingData, setIsLoadingData] = useState(true);
 const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
+const location = useLocation();
 
 // BAGIAN YANG SERING ERROR:
 const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -29,6 +29,8 @@ const [rejectId, setRejectId] = useState<number | null>(null);
 const [rejectReason, setRejectReason] = useState(""); 
 const [filterStatus, setFilterStatus] = useState("all"); 
 const [searchTerm, setSearchTerm] = useState("");
+const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
+const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -58,6 +60,21 @@ const [searchTerm, setSearchTerm] = useState("");
       localStorage.setItem("foodiegram_recipe_draft", JSON.stringify(formData));
     }
   }, [formData, editingRecipeId]);
+
+  useEffect(() => {
+  const targetId = location.state?.highlightRecipeId;
+  
+  if (targetId && recipes.length > 0) {
+    const foundRecipe = recipes.find(r => r.id === targetId);
+    if (foundRecipe) {
+      setSelectedRecipe(foundRecipe); 
+      setIsVerifyModalOpen(true); // Buka modal verifikasi, BUKAN modal tambah
+      
+      // Bersihkan state lokasi agar tidak terbuka terus saat di-refresh
+      window.history.replaceState({}, document.title);
+    }
+  }
+}, [location.state, recipes]);
 
   const fetchCats = async () => {
     try {
@@ -319,6 +336,75 @@ const [searchTerm, setSearchTerm] = useState("");
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* MODAL VERIFIKASI (HASIL KLIK NOTIFIKASI) */}
+<Dialog open={isVerifyModalOpen} onOpenChange={setIsVerifyModalOpen}>
+  <DialogContent className="sm:max-w-[600px] bg-white">
+    <DialogHeader>
+      <DialogTitle>Verifikasi Resep Baru</DialogTitle>
+      <DialogDescription>
+        Tinjau detail resep sebelum memberikan persetujuan.
+      </DialogDescription>
+    </DialogHeader>
+
+    {selectedRecipe && (
+      <div className="space-y-4">
+        <div className="flex gap-4 items-start border-b pb-4">
+          <img 
+            src={selectedRecipe.displayImage} 
+            className="w-24 h-24 rounded-lg object-cover border" 
+            alt="Preview" 
+          />
+          <div>
+            <h3 className="font-bold text-lg">{selectedRecipe.title}</h3>
+            <p className="text-sm text-slate-500">ID Resep: #{selectedRecipe.id}</p>
+            <Badge className="mt-2 bg-amber-100 text-amber-700">PENDING REVIEW</Badge>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="font-bold">Bahan-bahan:</p>
+            <ul className="list-disc list-inside text-slate-600">
+              {/* Sesuaikan dengan struktur data dari Dwi */}
+              {selectedRecipe.ingredients?.slice(0, 3).map((ing: any, i: number) => (
+                <li key={i}>{ing}</li>
+              ))}
+              {selectedRecipe.ingredients?.length > 3 && <li>...dan lainnya</li>}
+            </ul>
+          </div>
+          <div>
+            <p className="font-bold">Informasi Gizi:</p>
+            <p className="text-slate-600">Protein: {selectedRecipe.protein}g</p>
+            <p className="text-slate-600">Waktu: {selectedRecipe.cooking_time} Menit</p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+               setRejectId(selectedRecipe.id);
+               setIsRejectModalOpen(true);
+               setIsVerifyModalOpen(false);
+            }}
+          >
+            Tolak Resep
+          </Button>
+          <Button 
+            className="bg-green-600 hover:bg-green-700 text-white"
+            onClick={() => {
+              handleVerify(selectedRecipe.id, 'approved');
+              setIsVerifyModalOpen(false);
+            }}
+          >
+            Setujui & Terbitkan
+          </Button>
+        </div>
+      </div>
+    )}
+  </DialogContent>
+</Dialog>
 
         <div className="flex gap-2 mb-4">
           {['all', 'pending', 'approved'].map((status) => (

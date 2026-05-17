@@ -6,6 +6,7 @@ import Dashboard from "./pages/admin/dashboard";
 import ManageRecipes from "./pages/admin/ManageRecipes";
 import ManageCategories from "./pages/admin/ManageCategories";
 import { Toaster } from 'sonner';
+import ProfileAdmin from "./pages/admin/ProfileAdmin";
 
 // --- IMPORT USER ---
 import Home from './pages/user/Home'; 
@@ -93,6 +94,12 @@ function App() {
           <Route path="/admin/kategori" element={
             <ProtectedRoute allowedRole="admin">
               <ManageCategories />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/profile" element={
+            <ProtectedRoute allowedRole="admin">
+              <ProfileAdmin />
             </ProtectedRoute>
           } />
 

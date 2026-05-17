@@ -5,7 +5,10 @@ import {
   Utensils, 
   Eye, 
   Heart, 
-  TrendingUp
+  TrendingUp,
+  Bell, 
+  Info,
+  Loader2
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -15,12 +18,14 @@ import {
   ArcElement,
   Title,
   Tooltip,
-  Legend,
+  Legend
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { Doughnut } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
+
+
 
 interface DashboardStats {
   totalPosts: number;
@@ -42,6 +47,7 @@ const Dashboard = () => {
   });
   const [chartDataState, setChartDataState] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // --- FUNGSI UPDATE CHART ---
   const updateChart = (data: any) => {
@@ -64,17 +70,17 @@ const Dashboard = () => {
   setIsLoading(true);
   try {
     const statsRes = await api.get("/recipes/stats").catch(() => null);
-    if (statsRes?.data) {
-      // Pastikan semua field terisi agar tidak error
-      setStats({
-        totalPosts: statsRes.data.total_posts || 0,
-        totalViews: statsRes.data.total_views || 0,
-        totalLikes: statsRes.data.total_likes || 0,
-        totalProtein: statsRes.data.total_protein || 0,
-        totalKarbo: statsRes.data.total_karbo || 0,
-        totalLemak: statsRes.data.total_lemak || 0
-      });
-    }
+if (statsRes?.data) {
+  setStats({
+    totalPosts: statsRes.data.total_posts || 0,
+    totalViews: statsRes.data.total_views || 0,
+    totalLikes: statsRes.data.total_likes || 0,
+    // Pastikan Dwi sudah mengirimkan data gizi ini di endpoint stats-nya
+    totalProtein: statsRes.data.total_protein || 0,
+    totalKarbo: statsRes.data.total_karbo || 0,
+    totalLemak: statsRes.data.total_lemak || 0
+  });
+}
 
       // 2. Trending
       try {
@@ -100,9 +106,20 @@ const Dashboard = () => {
     }
   };
 
+  const fetchNotifications = async () => {
+  try {
+    // Memanggil endpoint yang ada di Swagger Dwi
+    const res = await api.get("/recipes/notifications");
+    setNotifications(res.data);
+  } catch (error) {
+    console.error("Gagal mengambil notifikasi:", error);
+  }
+};
+
   // --- TRIGGER SAAT HALAMAN DIBUKA ---
   useEffect(() => {
     fetchDashboardData();
+    fetchNotifications();
   }, []); // Ini baru benar letaknya!
 
 
@@ -262,9 +279,8 @@ const Dashboard = () => {
           
           <div className="h-[350px] w-full mt-auto">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4">
-                <div className="w-10 h-10 border-4 border-orange-100 border-t-[#F27F22] rounded-full animate-spin" />
-                <p className="text-slate-400 text-sm font-medium animate-pulse">Menyusun grafik...</p>
+              <div className="flex justify-center py-10">
+                <Loader2 className="animate-spin text-blue-500" size={32} />
               </div>
             ) : chartDataState ? (
               <Bar 

@@ -3,48 +3,18 @@ import {
   LayoutDashboard, 
   Utensils, 
   Tag, 
-  LogOut 
+  LogOut,
+  User
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import React, { useState, useEffect } from "react";
-import api from "../../api/axios";
+import NotificationBell from "./NotificationBell";
 
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [notif, setNotif] = useState(0);
-
-  // 1. Fungsi untuk mengambil jumlah resep pending
-  const fetchNotif = async () => {
-    try {
-      const response = await api.get("/recipes");
-      const allData = response.data.recipes || response.data || [];
-      // Menghitung jumlah resep yang statusnya 'pending'
-      const pendingCount = allData.filter((r: any) => r.status === 'pending').length;
-      setNotif(pendingCount);
-    } catch (err) {
-      console.log("Gagal mengambil data notifikasi");
-    }
-  };
-
-  // 2. Lifecycle untuk inisialisasi dan event listener
-  useEffect(() => {
-    fetchNotif(); // Ambil data saat komponen pertama kali muncul
-
-    // Mendengarkan sinyal "recipeUpdated" dari halaman ManageRecipes
-    window.addEventListener("recipeUpdated", fetchNotif);
-
-    // Cek otomatis setiap 1 menit untuk resep baru dari user lain
-    const interval = setInterval(fetchNotif, 60000);
-
-    return () => {
-      window.removeEventListener("recipeUpdated", fetchNotif);
-      clearInterval(interval);
-    };
-  }, []);
 
   const menuItems = [
-    { 
+    {   
       title: "Dashboard", 
       path: "/admin/dashboard", 
       icon: <LayoutDashboard size={20} /> 
@@ -52,14 +22,19 @@ const Sidebar = () => {
     { 
       title: "Control Resep", 
       path: "/admin/resep", 
-      icon: <Utensils size={20} />,
-      badge: notif > 0 ? notif : null, // Badge otomatis terisi jika ada pending
+      icon: <Utensils size={20} />
     },
     { 
       title: "Kategori", 
       path: "/admin/kategori", 
       icon: <Tag size={20} /> 
     },
+
+    {
+  title: "Profil",
+  path: "/admin/profile",
+  icon: <User size={20} />, // Pastikan User sudah di-import dari lucide-react
+},
   ];
 
   const handleLogout = () => {
@@ -69,6 +44,7 @@ const Sidebar = () => {
       navigate("/login");
     }
   };
+
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col z-50 shadow-sm">
@@ -111,22 +87,14 @@ const Sidebar = () => {
                 {item.icon}
               </span>
               <span className="font-medium flex-1">{item.title}</span>
-              
-              {/* Menampilkan Badge Notifikasi */}
-              {item.badge && (
-                <span className={cn(
-                  "px-2 py-0.5 rounded-full text-[10px] font-bold transition-all",
-                  isActive 
-                    ? "bg-white text-[#F27F22]" 
-                    : "bg-red-500 text-white animate-pulse"
-                )}>
-                  {item.badge}
-                </span>
-              )}
             </Link>
           );
         })}
       </nav>
+
+      <div className="px-6 py-2 flex justify-center border-t border-slate-50 pt-4">
+        <NotificationBell />
+      </div>
 
       {/* Profile Admin */}
       <div className="px-6 py-4 bg-slate-50 mx-4 rounded-xl mb-2 flex items-center gap-3">
