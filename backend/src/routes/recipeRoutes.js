@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 
-const { 
+const {
     getRecipeFeed,
     getFollowingFeed,
     getTrendingRecipes,
-    createRecipe, 
-    getAllRecipes, 
-    toggleLike, 
+    createRecipe,
+    getAllRecipes,
+    toggleLike,
     toggleSave,
     toggleFollow,
     getRecipeById,
@@ -24,32 +24,33 @@ const {
     createCategory,
     updateCategory,
     deleteCategory,
-    getPendingRecipes, 
+    getPendingRecipes,
     verifyRecipe,
     getNotifications,
     markNotificationAsRead
-
 } = require('../controllers/recipeController');
 
 const authenticateToken = require('../middleware/authMiddleware');
 const adminOnly = require('../middleware/adminMiddleware');
 const { upload, uploadAndResize } = require('../middleware/uploadMiddleware');
 
- /**
+/**
  * @swagger
  * tags:
- *   - name: Recipe Discovery
- *     description: Fitur jelajah resep (Feed, Search, Detail)
- *   - name: Category Management
- *     description: Fitur kelola kategori resep (Admin)
- *   - name: Recipe Management
- *     description: Fitur kelola resep pribadi (Post, Edit, Delete, My Recipes)
- *   - name: Recipe Interactions
- *     description: Fitur interaksi user (Like, Save, Stats)
- *   - name: Social
- *     description: Fitur hubungan antar pengguna (Follow)
- *   - name: Admin Section
- *     description: Fitur khusus moderator/admin untuk verifikasi konten resep
+ * - name: Recipe Discovery
+ *   description: Fitur jelajah resep (Feed, Search, Detail)
+ * - name: Category Management
+ *   description: Fitur kelola kategori resep (Admin)
+ * - name: Recipe Management
+ *   description: Fitur kelola resep pribadi (Post, Edit, Delete, My Recipes)
+ * - name: Recipe Interactions
+ *   description: Fitur interaksi user (Like, Save, Stats)
+ * - name: Social
+ *   description: Fitur hubungan antar pengguna (Follow)
+ * - name: Admin Section
+ *   description: Fitur khusus moderator/admin untuk verifikasi konten resep
+ * - name: Notifications
+ *   description: Fitur sistem notifikasi pembaruan status resep bagi pengguna
  */
 
 /**
@@ -118,19 +119,6 @@ router.get('/feed', authenticateToken, getRecipeFeed);
  *     responses:
  *       200:
  *         description: Berhasil mengambil feed following
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                 count:
- *                   type: integer
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
  */
 router.get('/following-feed', authenticateToken, getFollowingFeed);
 
@@ -150,26 +138,6 @@ router.get('/my-recipes', authenticateToken, getMyRecipes);
 
 /**
  * @swagger
- * /api/recipes/user/{userId}:
- *   get:
- *     summary: Mendapatkan koleksi resep milik user tertentu (Profil Publik)
- *     tags: [Recipe Discovery]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Berhasil mengambil resep user
- */
-router.get('/user/:userId', authenticateToken, getUserRecipes);
-
-/**
- * @swagger
  * /api/recipes/saved:
  *   get:
  *     summary: Mendapatkan daftar resep yang disimpan oleh user login (Koleksi Bookmark)
@@ -182,8 +150,6 @@ router.get('/user/:userId', authenticateToken, getUserRecipes);
  */
 router.get('/saved', authenticateToken, getSavedRecipes);
 
-
-
 /**
  * @swagger
  * /api/recipes/categories:
@@ -194,7 +160,7 @@ router.get('/saved', authenticateToken, getSavedRecipes);
  *       200:
  *         description: Berhasil mengambil daftar kategori
  */
-router.get('/categories', getCategories); 
+router.get('/categories', getCategories);
 
 /**
  * @swagger
@@ -220,7 +186,7 @@ router.get('/categories', getCategories);
  *       403:
  *         description: Akses ditolak, bukan admin
  */
-router.post('/categories', authenticateToken, adminOnly, createCategory); 
+router.post('/categories', authenticateToken, adminOnly, createCategory);
 
 /**
  * @swagger
@@ -249,10 +215,8 @@ router.post('/categories', authenticateToken, adminOnly, createCategory);
  *     responses:
  *       200:
  *         description: Berhasil diperbarui
- *       403:
- *         description: Akses ditolak
  */
-router.put('/categories/:id', authenticateToken, adminOnly, updateCategory); 
+router.put('/categories/:id', authenticateToken, adminOnly, updateCategory);
 
 /**
  * @swagger
@@ -271,8 +235,6 @@ router.put('/categories/:id', authenticateToken, adminOnly, updateCategory);
  *     responses:
  *       200:
  *         description: Berhasil dihapus
- *       403:
- *         description: Akses ditolak
  */
 router.delete('/categories/:id', authenticateToken, adminOnly, deleteCategory);
 
@@ -302,7 +264,7 @@ router.get('/stats', authenticateToken, getUserStats);
  *         required: true
  *         schema:
  *           type: string
- *         description: "Daftar bahan dipisahkan koma"
+ *         description: Daftar bahan dipisahkan koma
  *     responses:
  *       200:
  *         description: Berhasil menemukan resep yang cocok
@@ -318,19 +280,6 @@ router.get('/search-ingredients', searchByIngredients);
  *     responses:
  *       200:
  *         description: Berhasil mengambil data trending
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id: { type: integer }
- *                   title: { type: string }
- *                   views_count: { type: integer }
- *                   protein: { type: number }
- *                   carbs: { type: number }
- *                   fat: { type: number }
  */
 router.get('/trending', getTrendingRecipes);
 
@@ -362,6 +311,39 @@ router.get('/followers', authenticateToken, getFollowers);
  */
 router.get('/following', authenticateToken, getFollowing);
 
+/**
+ * @swagger
+ * /api/recipes/notifications:
+ *   get:
+ *     summary: Mendapatkan semua notifikasi milik user
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil daftar notifikasi
+ */
+router.get('/notifications', authenticateToken, getNotifications);
+
+/**
+ * @swagger
+ * /api/recipes/notifications/{id}/read:
+ *   put:
+ *     summary: Menandai satu notifikasi sebagai sudah dibaca
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Berhasil memperbarui status
+ */
+router.put('/notifications/:id/read', authenticateToken, markNotificationAsRead);
 
 /**
  * @swagger
@@ -379,16 +361,28 @@ router.get('/following', authenticateToken, getFollowing);
  *             type: object
  *             required: [title, category_id, ingredients, steps]
  *             properties:
- *               title: { type: string, example: "Salmon Grill Sehat" }
- *               category_id: { type: integer, example: 2 }
- *               post_type: { type: string, enum: [photo, reels], example: "photo" }
- *               ingredients: { type: string, example: "Salmon, Lemon, Rosemary, Garam" }
- *               steps: { type: string, example: "1. Cuci salmon, 2. Marinasai, 3. Panggang 15 menit" }
- *               cooking_time: { type: integer, example: 20 }
- *               protein: { type: number, example: 25.5 }
- *               carbs: { type: number, example: 5.0 }
- *               fat: { type: number, example: 12.2 }
- *               image: { type: string, format: binary }
+ *               title:
+ *                 type: string
+ *               category_id:
+ *                 type: integer
+ *               post_type:
+ *                 type: string
+ *                 enum: [photo, reels]
+ *               ingredients:
+ *                 type: string
+ *               steps:
+ *                 type: string
+ *               cooking_time:
+ *                 type: integer
+ *               protein:
+ *                 type: number
+ *               carbs:
+ *                 type: number
+ *               fat:
+ *                 type: number
+ *               image:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       201:
  *         description: Resep Berhasil Dipublish
@@ -410,10 +404,13 @@ router.post('/', authenticateToken, upload.single('image'), uploadAndResize, cre
  *           schema:
  *             type: object
  *             properties:
- *               recipe_id: { type: integer, example: 1 }
+ *               recipe_id:
+ *                 type: integer
  *     responses:
+ *       200:
+ *         description: Berhasil Unlike (Recipe unliked successfully)
  *       201:
- *         description: Like/Unlike berhasil
+ *         description: Berhasil Like (Recipe liked successfully)
  */
 router.post('/like', authenticateToken, toggleLike);
 
@@ -432,10 +429,13 @@ router.post('/like', authenticateToken, toggleLike);
  *           schema:
  *             type: object
  *             properties:
- *               recipe_id: { type: integer, example: 1 }
+ *               recipe_id:
+ *                 type: integer
  *     responses:
+ *       200:
+ *         description: Berhasil Unsave (Recipe unsaved successfully)
  *       201:
- *         description: Berhasil disimpan/dihapus
+ *         description: Berhasil Save (Recipe saved successfully)
  */
 router.post('/save', authenticateToken, toggleSave);
 
@@ -454,65 +454,36 @@ router.post('/save', authenticateToken, toggleSave);
  *           schema:
  *             type: object
  *             properties:
- *               following_id: { type: integer, example: 2 }
+ *               following_id:
+ *                 type: integer
  *     responses:
+ *       200:
+ *         description: Berhasil Unfollow (User unfollowed successfully)
  *       201:
- *         description: Berhasil Follow/Unfollow
+ *         description: Berhasil Follow (User followed successfully)
  */
 router.post('/follow', authenticateToken, toggleFollow);
 
 /**
  * @swagger
- * /api/recipes/notifications:
+ * /api/recipes/admin/pending:
  *   get:
- *     summary: Mendapatkan semua notifikasi milik user
- *     description: Mengambil daftar pesan sistem terkait status resep (diterima/ditolak) untuk user yang sedang login.
- *     tags: [Notifications]
+ *     summary: Mengambil antrean resep yang perlu divalidasi (Admin Only)
+ *     tags: [Admin Section]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Berhasil mengambil daftar notifikasi
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: integer
- *                     example: 10
- *                   user_id:
- *                     type: integer
- *                     example: 5
- *                   recipe_id:
- *                     type: integer
- *                     example: 102
- *                   message:
- *                     type: string
- *                     example: "Selamat! Resep 'Nasi Goreng Spesial' kamu telah disetujui. 🎉"
- *                   is_read:
- *                     type: boolean
- *                     example: false
- *                   created_at:
- *                     type: string
- *                     format: date-time
- *                     example: "2026-05-07T11:20:00Z"
- *       401:
- *         description: Unauthorized - Token tidak valid atau sesi berakhir
- *       500:
- *         description: Server Error - Gagal mengambil data dari database
+ *         description: Berhasil mengambil daftar antrean resep
  */
-router.get('/notifications', authenticateToken, getNotifications);
+router.get('/admin/pending', authenticateToken, adminOnly, getPendingRecipes);
 
 /**
  * @swagger
- * /api/recipes/notifications/{id}/read:
- *   put:
- *     summary: Menandai satu notifikasi sebagai sudah dibaca
- *     description: Mengubah status 'is_read' menjadi true agar tidak muncul lagi sebagai notifikasi baru di ikon lonceng.
- *     tags: [Notifications]
+ * /api/recipes/admin/verify/{id}:
+ *   patch:
+ *     summary: Menyetujui atau menolak resep (Admin Only)
+ *     tags: [Admin Section]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -521,24 +492,45 @@ router.get('/notifications', authenticateToken, getNotifications);
  *         required: true
  *         schema:
  *           type: integer
- *         description: ID unik dari notifikasi
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [approved, rejected]
+ *               reason:
+ *                 type: string
  *     responses:
  *       200:
- *         description: Berhasil memperbarui status
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: "Notifikasi telah dibaca"
- *       404:
- *         description: Notifikasi tidak ditemukan atau bukan milik user tersebut
- *       500:
- *         description: Server Error
+ *         description: Berhasil memperbarui status verifikasi
  */
-router.put('/notifications/:id/read', authenticateToken, markNotificationAsRead);
+router.patch('/admin/verify/:id', authenticateToken, adminOnly, verifyRecipe);
+
+/**
+ * @swagger
+ * /api/recipes/user/{userId}:
+ *   get:
+ *     summary: Mendapatkan koleksi resep milik user tertentu (Profil Publik)
+ *     tags: [Recipe Discovery]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil resep milik user tersebut
+ */
+router.get('/user/:userId', authenticateToken, getUserRecipes);
 
 /**
  * @swagger
@@ -564,7 +556,7 @@ router.get('/:id', authenticateToken, getRecipeById);
  * @swagger
  * /api/recipes/{id}:
  *   put:
- *     summary: Memperbarui data resep (Edit Judul, Bahan, dsb)
+ *     summary: Memperbarui data resep (Edit Judul, Bahan, dan Gambar Baru)
  *     tags: [Recipe Management]
  *     security:
  *       - bearerAuth: []
@@ -577,19 +569,26 @@ router.get('/:id', authenticateToken, getRecipeById);
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             properties:
- *               title: { type: string, example: "Salmon Grill Sehat (Updated)" }
- *               category_id: { type: integer, example: 2 }
- *               ingredients: { type: string, example: "Salmon, Lemon, Rosemary" }
- *               steps: { type: string, example: "1. Cuci, 2. Panggang" }
+ *               title:
+ *                 type: string
+ *               category_id:
+ *                 type: integer
+ *               ingredients:
+ *                 type: string
+ *               steps:
+ *                 type: string
+ *               image:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       200:
  *         description: Resep berhasil diperbarui
  */
-router.put('/:id', authenticateToken, updateRecipe);
+router.put('/:id', authenticateToken, upload.single('image'), uploadAndResize, updateRecipe);
 
 /**
  * @swagger
@@ -610,74 +609,5 @@ router.put('/:id', authenticateToken, updateRecipe);
  *         description: Resep berhasil dihapus
  */
 router.delete('/:id', authenticateToken, deleteRecipe);
-
-/**
- * @swagger
- * /api/recipes/admin/pending:
- *   get:
- *     summary: Mengambil antrean resep yang perlu divalidasi (Admin Only)
- *     tags: [Admin Section]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Berhasil mengambil daftar antrean resep yang belum diverifikasi
- */
-router.get('/admin/pending', authenticateToken, adminOnly, getPendingRecipes);
-
-/**
- * @swagger
- * /api/recipes/admin/verify/{id}:
- *   patch:
- *     summary: Menyetujui atau menolak resep (Admin Only)
- *     description: Moderator dapat menyetujui atau menolak resep. Jika ditolak, alasan (reason) wajib diisi agar user tahu kesalahannya.
- *     tags: [Admin Section]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: ID Resep yang akan diverifikasi
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - status
- *             properties:
- *               status:
- *                 type: string
- *                 enum: [approved, rejected]
- *                 description: Status verifikasi resep.
- *                 example: "rejected"
- *               reason:
- *                 type: string
- *                 description: Alasan jika resep ditolak (Wajib diisi jika status = rejected).
- *                 example: "Foto kurang jelas dan bahan-bahan tidak lengkap."
- *     responses:
- *       200:
- *         description: Berhasil memperbarui status dan notifikasi telah dikirim ke user.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                 recipe:
- *                   type: object
- *       400:
- *         description: Bad Request - Status tidak valid atau alasan penolakan tidak diisi.
- *       403:
- *         description: Forbidden - Hanya Admin yang dapat mengakses endpoint ini.
- *       404:
- *         description: Not Found - ID Resep tidak ditemukan.
- */
-router.patch('/admin/verify/:id', authenticateToken, adminOnly, verifyRecipe);
 
 module.exports = router;

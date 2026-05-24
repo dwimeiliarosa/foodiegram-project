@@ -23,6 +23,23 @@ const register = async (req, res) => {
             [username, email, hashedPassword]
         );
 
+        // 4. LOGIKA NOTIFIKASI REGISTRASI KE ADMIN
+        const adminQuery = `SELECT id FROM users WHERE role = 'admin'`;
+        const admins = await db.query(adminQuery);
+
+        if (admins.rows.length > 0) {
+            const adminMessage = `User baru telah mendaftar: "${username}" (${email}).`;
+            
+            const notifPromises = admins.rows.map(admin => {
+                return db.query(
+                    `INSERT INTO notifications (user_id, message) VALUES ($1, $2)`,
+                    [admin.id, adminMessage]
+                );
+            });
+            
+            await Promise.all(notifPromises);
+        }
+
         res.status(201).json({
             message: 'Registrasi berhasil!',
             user: newUser.rows[0]
@@ -54,21 +71,19 @@ const login = async (req, res) => {
         }
 
         // 3. Buat Access Token & Refresh Token
-        // Access Token (Umur pendek - 15 menit)
         const accessToken = jwt.sign(
             { id: user.id, username: user.username, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
         );
 
-        // Refresh Token (Umur panjang - 7 hari)
         const refreshToken = jwt.sign(
             { id: user.id },
             process.env.JWT_REFRESH_SECRET,
             { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
         );
 
-        // 4. Simpan Refresh Token ke Database (Update kolom refresh_token)
+        // 4. Simpan Refresh Token ke Database
         await db.query('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
 
         // 5. Kirim respon sukses
@@ -92,7 +107,7 @@ const login = async (req, res) => {
 
 // --- FUNGSI REFRESH TOKEN ---
 const refreshToken = async (req, res) => {
-    const { token } = req.body; // Frontend mengirim refreshToken di body
+    const { token } = req.body;
 
     if (!token) {
         return res.status(401).json({ message: 'Refresh Token tidak ditemukan' });
@@ -108,7 +123,7 @@ const refreshToken = async (req, res) => {
 
         const user = userResult.rows[0];
 
-        // 2. Verifikasi Refresh Token menggunakan Secret khusus Refresh
+        // 2. Verifikasi Refresh Token
         jwt.verify(token, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
             if (err) {
                 return res.status(403).json({ message: 'Refresh Token kadaluwarsa' });
@@ -146,16 +161,31 @@ const getProfile = async (req, res) => {
     }
 };
 
-// --- FUNGSI UPDATE PROFILE (TEXT DATA) ---
+// --- FUNGSI UPDATE PROFILE (TEXT & EMAIL DATA) ---
+// Perubahan: Menggunakan COALESCE agar aman jika data kosong, serta proteksi duplikasi email.
 const updateProfile = async (req, res) => {
-    const { username, bio } = req.body;
-    const userId = req.user.id; // Diambil dari middleware authenticateToken
+    const { username, bio, email } = req.body;
+    const userId = req.user.id;
 
     try {
-        const result = await db.query(
-            'UPDATE users SET username = $1, bio = $2 WHERE id = $3 RETURNING id, username, email, bio, photo_profile',
-            [username, bio, userId]
-        );
+        // Cek duplikasi email jika user menginputkan email baru
+        if (email) {
+            const emailCheck = await db.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, userId]);
+            if (emailCheck.rows.length > 0) {
+                return res.status(400).json({ message: "Email sudah digunakan oleh user lain" });
+            }
+        }
+
+        const query = `
+            UPDATE users 
+            SET username = COALESCE($1, username), 
+                bio = COALESCE($2, bio), 
+                email = COALESCE($3, email),
+                updated_at = NOW() 
+            WHERE id = $4 
+            RETURNING id, username, email, bio, photo_profile, role
+        `;
+        const result = await db.query(query, [username, bio, email, userId]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ message: "User tidak ditemukan" });
@@ -180,7 +210,6 @@ const updateAvatar = async (req, res) => {
     }
 
     try {
-        // req.file.url didapat dari middleware uploadAndResize
         const photoUrl = req.file.url;
 
         const result = await db.query(
@@ -197,12 +226,12 @@ const updateAvatar = async (req, res) => {
         res.status(500).json({ message: "Gagal mengunggah foto profil" });
     }
 };
+
 // --- FUNGSI DELETE HANYA FOTO PROFIL ---
 const deletePhotoProfile = async (req, res) => {
     const userId = req.user.id;
 
     try {
-        // 1. Set kolom photo_profile menjadi null di database
         const result = await db.query(
             'UPDATE users SET photo_profile = NULL WHERE id = $1 RETURNING id, username, photo_profile',
             [userId]
@@ -222,6 +251,66 @@ const deletePhotoProfile = async (req, res) => {
     }
 };
 
+// --- FUNGSI BARU: GANTI PASSWORD USER ---
+const changePassword = async (req, res) => {
+    const userId = req.user.id;
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+        return res.status(400).json({ message: "Password lama dan baru wajib diisi!" });
+    }
+
+    try {
+        // Ambil password hash lama dari database
+        const userRes = await db.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ message: "User tidak ditemukan" });
+        }
+
+        // Verifikasi password lama menggunakan Argon2
+        const validPassword = await argon2.verify(userRes.rows[0].password_hash, oldPassword);
+        if (!validPassword) {
+            return res.status(400).json({ message: "Password lama yang kamu masukkan salah!" });
+        }
+
+        // Hash password baru dengan Argon2
+        const hashedNewPassword = await argon2.hash(newPassword);
+
+        // Update ke database
+        await db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hashedNewPassword, userId]);
+        return res.status(200).json({ message: "Password berhasil diperbarui! 🔐" });
+    } catch (error) {
+        console.error('Error Change Password:', error.message);
+        return res.status(500).json({ message: "Gagal mengganti password" });
+    }
+};
+
+// --- FUNGSI BARU: DASHBOARD ADMIN (LIHAT SEMUA USER) ---
+const getAllUsers = async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, username, email, role, photo_profile, created_at FROM users ORDER BY created_at DESC');
+        return res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('Error Get All Users:', error.message);
+        return res.status(500).json({ message: "Gagal mengambil daftar user" });
+    }
+};
+
+// --- FUNGSI BARU: DETAIL PROFIL USER TERTENTU (BERDASARKAN ID) ---
+const getUserById = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('SELECT id, username, email, bio, photo_profile, role FROM users WHERE id = $1', [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "User tidak ditemukan" });
+        }
+        return res.status(200).json(result.rows[0]);
+    } catch (error) {
+        console.error('Error Get User By ID:', error.message);
+        return res.status(500).json({ message: "Gagal mengambil detail user" });
+    }
+};
+
 module.exports = { 
     register, 
     login,
@@ -229,5 +318,8 @@ module.exports = {
     getProfile,
     updateProfile,
     updateAvatar,
-    deletePhotoProfile 
+    deletePhotoProfile,
+    changePassword,  
+    getAllUsers,     
+    getUserById      
 };
