@@ -18,6 +18,7 @@ import Navbar from './components/user/Navbar';
 import EditProfile from './pages/user/EditProfile'; // Tambahkan ini
 import Search from "./pages/user/Search"; // Sesuaikan folder tempat kamu menyimpan Search.tsx
 import NotificationPage from "./pages/user/NotificationPage"; // Import filenya
+import UserProfile from "./pages/user/UserProfile";
 
 // Di dalam <Routes>
 <Route path="/notifications" element={<NotificationPage />} />
@@ -50,7 +51,7 @@ function App() {
           <Route path="/admin/login" element={<Login />} />
           <Route path="/admin/register" element={<Register />} />
           <Route path="/search" element={<Search />} />
-
+          
           {/* BAGIAN USER (WANDA) */}
           {/* Jika ingin Home hanya bisa dilihat setelah login, gunakan pengecekan di bawah */}
           <Route path="/" element={
@@ -79,6 +80,13 @@ function App() {
               <Navbar /> 
             </ProtectedRoute>
           } />
+
+          <Route path="/user/:id" element={
+  <ProtectedRoute allowedRole="user">
+    <main className="flex-1 container mx-auto px-4 py-8 pb-24"><UserProfile /></main>
+    <Navbar /> 
+  </ProtectedRoute>
+} />
 
           <Route path="/upload" element={
             <ProtectedRoute allowedRole="user">

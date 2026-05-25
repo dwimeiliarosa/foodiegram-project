@@ -13,9 +13,8 @@ const EditProfile = () => {
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // --- FIX NAVBAR (Paling Akurat) ---
+  // --- FIX NAVBAR ---
   useEffect(() => {
-    // Sembunyikan semua elemen navigasi (nav atau div dengan class nav)
     const navs = document.querySelectorAll('nav, [class*="nav"], [class*="Navbar"]');
     navs.forEach((el) => {
       if (el instanceof HTMLElement) el.style.setProperty("display", "none", "important");
@@ -28,6 +27,7 @@ const EditProfile = () => {
     };
   }, []);
 
+  // --- AMBIL DATA PROFIL SAAT INI ---
   useEffect(() => {
     const fetchCurrentProfile = async () => {
       try {
@@ -50,41 +50,72 @@ const EditProfile = () => {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // --- TAMBAHKAN LOGIKA INI ---
+      const maxSizeInMB = 1; // Tentukan limit di sini, misal 1MB
+      const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
+
+      if (file.size > maxSizeInBytes) {
+        alert(`Ukuran foto terlalu besar! Maksimal ${maxSizeInMB}MB.`);
+        // Reset input file agar user bisa pilih lagi
+        e.target.value = ""; 
+        return;
+      }
+      // ----------------------------
+
       setSelectedFile(file);
       setPreview(URL.createObjectURL(file));
     }
   };
-
+  // --- FUNGSI SIMPAN (LOGIKA BARU) ---
   const handleSave = async () => {
     setLoading(true);
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("bio", bio);
-    formData.append("location", location);
-    if (selectedFile) {
-      formData.append("photo", selectedFile); 
-    }
-
     try {
-      // PERUBAHAN DISINI: Ganti PUT menjadi POST karena PUT memberikan error 404
-      const response = await fetch("http://localhost:5000/api/auth/profile", {
-        method: "POST", 
+      // 1. UPDATE DATA TEKS (Username & Bio)
+      const resProfile = await fetch("http://localhost:5000/api/auth/update-profile", {
+        method: "PUT",
         headers: { 
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}` 
         },
-        body: formData,
+        body: JSON.stringify({
+          username: username,
+          bio: bio,
+          location: location
+        }),
       });
 
-      if (response.ok) {
+      // 2. UPDATE FOTO (Jika ada file baru yang dipilih)
+      if (selectedFile) {
+        const formData = new FormData();
+        // Sesuai saran: "avatar" harus sesuai dengan request backend Dwi
+        formData.append("image", selectedFile); 
+
+        const resAvatar = await fetch("http://localhost:5000/api/auth/update-avatar", {
+          method: "PUT",
+          headers: { 
+            // PENTING: Jangan isi Content-Type di sini agar browser yang mengaturnya
+            Authorization: `Bearer ${token}` 
+          },
+          body: formData,
+        });
+
+        if (!resAvatar.ok) {
+          const errorFoto = await resAvatar.json();
+          console.error("Gagal upload foto:", errorFoto);
+          alert("Gagal memperbarui foto profil, tetapi data teks berhasil disimpan.");
+        }
+      }
+
+      if (resProfile.ok) {
         alert("Profil berhasil diperbarui!");
         navigate("/profile");
       } else {
-        const errorText = await response.text();
-        console.log("Full Error:", errorText);
-        alert("Gagal memperbarui: Cek apakah route POST /api/auth/profile sudah ada di backend.");
+        const errorData = await resProfile.json();
+        alert(errorData.message || "Gagal memperbarui profil");
       }
     } catch (error) {
       console.error("Koneksi gagal:", error);
+      alert("Terjadi kesalahan koneksi ke server");
     } finally {
       setLoading(false);
     }
@@ -147,15 +178,7 @@ const EditProfile = () => {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-gray-700 ml-1">Lokasi</label>
-            <input 
-              type="text" 
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="w-full p-4 bg-gray-50 rounded-2xl border border-gray-100 outline-none focus:border-orange-500 focus:bg-white transition-all shadow-sm"
-            />
-          </div>
+      
         </div>
       </main>
     </div>
