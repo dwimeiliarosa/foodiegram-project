@@ -179,38 +179,54 @@ const toggleLike = async (req, res) => {
     const userId = req.user.id;
     const username = req.user.username; // Ambil username pengirim like
 
+    if (!recipe_id) {
+        return res.status(400).json({ message: "Recipe ID wajib disertakan" });
+    }
+
     try {
+        // Cek dulu apakah resep yang mau di-like benar-barang ada di database
+        const recipeCheck = await db.query('SELECT id, title, user_id FROM recipes WHERE id = $1', [recipe_id]);
+        if (recipeCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'Resep tidak ditemukan' });
+        }
+
         const checkLike = await db.query(
             'SELECT * FROM likes WHERE user_id = $1 AND recipe_id = $2',
             [userId, recipe_id]
         );
 
         if (checkLike.rows.length > 0) {
+            // Logika UNLIKE
             await db.query('DELETE FROM likes WHERE user_id = $1 AND recipe_id = $2', [userId, recipe_id]);
-            return res.status(200).json({ message: 'Unlike berhasil' });
+            
+            return res.status(200).json({ 
+                message: 'Unlike berhasil 💔',
+                is_liked: false 
+            });
         } else {
-            // 1. Simpan Like
+            // Logika LIKE
             await db.query('INSERT INTO likes (user_id, recipe_id) VALUES ($1, $2)', [userId, recipe_id]);
 
-            // 2. LOGIKA NOTIFIKASI: Cari tahu siapa pemilik resepnya
-            const recipeOwner = await db.query('SELECT user_id, title FROM recipes WHERE id = $1', [recipe_id]);
-            
-            if (recipeOwner.rows.length > 0) {
-                const ownerId = recipeOwner.rows[0].user_id;
-                const recipeTitle = recipeOwner.rows[0].title;
+            // LOGIKA NOTIFIKASI: Beri tahu pemilik resep
+            const ownerId = recipeCheck.rows[0].user_id;
+            const recipeTitle = recipeCheck.rows[0].title;
 
-                // Jangan beri notif jika yang like adalah pemiliknya sendiri
-                if (ownerId !== userId) {
-                    const message = `@${username} menyukai resep kamu: "${recipeTitle}" ❤️`;
-                    await db.query(
-                        'INSERT INTO notifications (user_id, recipe_id, message) VALUES ($1, $2, $3)',
-                        [ownerId, recipe_id, message]
-                    );
-                }
+            // Jangan beri notif jika yang menyukai adalah pemiliknya sendiri
+            if (ownerId !== userId) {
+                const message = `@${username} menyukai resep kamu: "${recipeTitle}" ❤️`;
+                await db.query(
+                    'INSERT INTO notifications (user_id, recipe_id, message) VALUES ($1, $2, $3)',
+                    [ownerId, recipe_id, message]
+                );
             }
-            return res.status(201).json({ message: 'Like berhasil ❤️' });
+            
+            return res.status(201).json({ 
+                message: 'Like berhasil ❤️',
+                is_liked: true 
+            });
         }
     } catch (error) {
+        console.error('Error Toggle Like:', error.message);
         res.status(500).json({ message: 'Gagal memproses Like' });
     }
 };
@@ -271,18 +287,95 @@ const toggleSave = async (req, res) => {
     }
 };
 
-// --- FUNGSI 5: DETAIL RESEP & UPDATE VIEWS (Sudah Beres) ---
+const getLikedRecipes = async (req, res) => {
+    const userId = req.user.id;
 
+    try {
+        const query = `
+            SELECT r.*, c.name as category_name, u.username,
+            (SELECT COUNT(*) FROM likes l WHERE l.recipe_id = r.id) as likes_count,
+            TRUE as is_liked,
+            EXISTS(SELECT 1 FROM saves WHERE recipe_id = r.id AND user_id = $1) as is_saved
+            FROM likes l
+            JOIN recipes r ON l.recipe_id = r.id
+            LEFT JOIN categories c ON r.category_id = c.id
+            LEFT JOIN users u ON r.user_id = u.id
+            WHERE l.user_id = $1
+            ORDER BY l.id DESC
+        `;
+        const result = await db.query(query, [userId]);
+        
+        // OPTIMASI: Parsing tipe data numerik agar seragam dengan fungsi getRecipeById
+        const parsedRecipes = result.rows.map(recipe => ({
+            ...recipe,
+            protein: parseFloat(recipe.protein) || 0,
+            carbs: parseFloat(recipe.carbs) || 0,
+            fat: parseFloat(recipe.fat) || 0,
+            cooking_time: parseInt(recipe.cooking_time) || 0,
+            likes_count: parseInt(recipe.likes_count) || 0,
+            views_count: parseInt(recipe.views_count) || 0,
+            is_liked: !!recipe.is_liked,
+            is_saved: !!recipe.is_saved
+        }));
+
+        return res.status(200).json({
+            total_liked: result.rowCount,
+            recipes: parsedRecipes
+        });
+    } catch (error) {
+        console.error('Error Get Liked Recipes:', error.message);
+        return res.status(500).json({ message: 'Gagal mengambil koleksi resep yang disukai' });
+    }
+};
+const getSavedRecipes = async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        const query = `
+            SELECT r.*, c.name as category_name, u.username,
+            (SELECT COUNT(*) FROM likes l WHERE l.recipe_id = r.id) as likes_count,
+            EXISTS(SELECT 1 FROM likes WHERE recipe_id = r.id AND user_id = $1) as is_liked,
+            TRUE as is_saved
+            FROM saves s
+            JOIN recipes r ON s.recipe_id = r.id
+            LEFT JOIN categories c ON r.category_id = c.id
+            LEFT JOIN users u ON r.user_id = u.id
+            WHERE s.user_id = $1
+            ORDER BY s.id DESC
+        `;
+        const result = await db.query(query, [userId]);
+        
+        // Parsing tipe data agar seragam dan aman di frontend
+        const parsedRecipes = result.rows.map(recipe => ({
+            ...recipe,
+            protein: parseFloat(recipe.protein) || 0,
+            carbs: parseFloat(recipe.carbs) || 0,
+            fat: parseFloat(recipe.fat) || 0,
+            cooking_time: parseInt(recipe.cooking_time) || 0,
+            likes_count: parseInt(recipe.likes_count) || 0,
+            views_count: parseInt(recipe.views_count) || 0,
+            is_liked: !!recipe.is_liked,
+            is_saved: !!recipe.is_saved
+        }));
+
+        return res.status(200).json({
+            total_saved: result.rowCount,
+            recipes: parsedRecipes
+        });
+    } catch (error) {
+        console.error('Error Get Saved Recipes:', error.message);
+        return res.status(500).json({ message: 'Gagal mengambil koleksi resep yang disimpan' });
+    }
+};
+
+// --- FUNGSI 5: DETAIL RESEP & UPDATE VIEWS ---
 const getRecipeById = async (req, res) => {
     const { id } = req.params;
-    // Ambil userId dari token (jika ada), kalau tidak ada set ke null (tamu)
     const userId = req.user ? req.user.id : null; 
-    // Ambil IP Address untuk validasi tamu unik
     const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     try {
         // 1. LOGIKA VIEWS UNIK: Masukkan ke tabel histori
-        // Menggunakan ON CONFLICT DO NOTHING agar jika data sudah ada, query ini diabaikan (tidak error)
         await db.query(
             `INSERT INTO recipe_views (recipe_id, user_id, ip_address) 
              VALUES ($1, $2, $3) 
@@ -290,14 +383,14 @@ const getRecipeById = async (req, res) => {
             [id, userId, ipAddress]
         );
 
-        // 2. Hitung total view unik dari tabel histori khusus resep ini
+        // 2. Hitung total view unik
         const countResult = await db.query(
             `SELECT COUNT(*) as total FROM recipe_views WHERE recipe_id = $1`,
             [id]
         );
-        const totalViews = parseInt(countResult.rows[0].total);
+        const totalViews = parseInt(countResult.rows[0].total) || 0;
 
-        // 3. Update kolom views_count di tabel recipes agar data di dashboard tetap sinkron
+        // 3. Update kolom views_count di tabel recipes
         await db.query(
             `UPDATE recipes SET views_count = $1 WHERE id = $2`,
             [totalViews, id]
@@ -323,56 +416,55 @@ const getRecipeById = async (req, res) => {
 
         const recipe = result.rows[0];
 
-        // 5. Response dengan data yang sudah di-parsing
-        res.status(200).json({
+        // 5. Response dengan data yang sudah di-parsing ke tipe data yang sesuai
+        return res.status(200).json({
             ...recipe,
             protein: parseFloat(recipe.protein) || 0,
             carbs: parseFloat(recipe.carbs) || 0,
             fat: parseFloat(recipe.fat) || 0,
             cooking_time: parseInt(recipe.cooking_time) || 0,
             likes_count: parseInt(recipe.likes_count) || 0,
-            views_count: totalViews, // Menampilkan hitungan unik terbaru
+            views_count: totalViews, 
             is_liked: !!recipe.is_liked, 
             is_saved: !!recipe.is_saved 
         });
         
     } catch (error) {
         console.error('Error Get Detail Recipe:', error.message);
-        res.status(500).json({ message: 'Gagal mengambil detail resep' });
+        return res.status(500).json({ message: 'Gagal mengambil detail resep' });
     }
 };
 
-// --- FUNGSI BARU: TRENDING RECIPES (Untuk Visualisasi Data Populer) ---
+// --- FUNGSI BARU: TRENDING RECIPES ---
 const getTrendingRecipes = async (req, res) => {
     try {
-        // Mengambil 5 resep dengan views terbanyak
         const query = `
-            SELECT id, title, views_count, protein, carbs, fat
+            SELECT id, title, views_count, protein, carbs, fat, image_url
             FROM recipes
+            WHERE status = 'approved'
             ORDER BY views_count DESC
             LIMIT 5
         `;
         const result = await db.query(query);
 
-        // Map data agar nutrisi menjadi Number
         const trending = result.rows.map(r => ({
             ...r,
-            views_count: parseInt(r.views_count),
-            protein: parseFloat(r.protein),
-            carbs: parseFloat(r.carbs),
-            fat: parseFloat(r.fat)
+            views_count: parseInt(r.views_count) || 0,
+            protein: parseFloat(r.protein) || 0,
+            carbs: parseFloat(r.carbs) || 0,
+            fat: parseFloat(r.fat) || 0
         }));
 
-        res.status(200).json(trending);
+        return res.status(200).json(trending);
     } catch (error) {
         console.error('Error Trending:', error.message);
-        res.status(500).json({ message: 'Gagal mengambil data trending' });
+        return res.status(500).json({ message: 'Gagal mengambil data trending' });
     }
 };
 
-// --- FUNGSI 6: MENGAMBIL RESEP MILIK USER SENDIRI (Posisi Baru) ---
+// --- FUNGSI 6: MENGAMBIL RESEP MILIK USER SENDIRI ---
 const getMyRecipes = async (req, res) => {
-    const userId = req.user.id; // Diambil dari token login
+    const userId = req.user.id; 
 
     try {
         const query = `
@@ -384,19 +476,19 @@ const getMyRecipes = async (req, res) => {
         `;
         const result = await db.query(query, [userId]);
 
-        res.status(200).json({
+        return res.status(200).json({
             total_recipes: result.rowCount,
             recipes: result.rows
         });
     } catch (error) {
         console.error('Error Get My Recipes:', error.message);
-        res.status(500).json({ message: 'Gagal mengambil resep anda' });
+        return res.status(500).json({ message: 'Gagal mengambil resep anda' });
     }
 };
 
-// --- FUNGSI 7: STATISTIK DASHBOARD USER (Baru) ---
+// --- FUNGSI 7: STATISTIK DASHBOARD USER ---
 const getUserStats = async (req, res) => {
-    const userId = req.user.id; // Mengambil ID dari token login
+    const userId = req.user.id; 
     try {
         const query = `
             SELECT 
@@ -409,40 +501,40 @@ const getUserStats = async (req, res) => {
             WHERE id = $1
         `;
         const result = await db.query(query, [userId]);
+        const stats = result.rows[0];
         
-        res.status(200).json({
-            total_posts: parseInt(result.rows[0].total_posts) || 0,
-            total_views: parseInt(result.rows[0].total_views) || 0,
-            total_likes: parseInt(result.rows[0].total_likes) || 0,
-            total_followers: parseInt(result.rows[0].total_followers) || 0, 
-            total_following: parseInt(result.rows[0].total_following) || 0  
+        return res.status(200).json({
+            total_posts: parseInt(stats.total_posts) || 0,
+            total_views: parseInt(stats.total_views) || 0,
+            total_likes: parseInt(stats.total_likes) || 0,
+            total_followers: parseInt(stats.total_followers) || 0, 
+            total_following: parseInt(stats.total_following) || 0  
         });
     } catch (error) {
         console.error('Error Get User Stats:', error.message);
-        res.status(500).json({ message: "Gagal mengambil statistik profil" });
+        return res.status(500).json({ message: "Gagal mengambil statistik profil" });
     }
 };
 
-// --- FUNGSI 8: MENGHAPUS RESEP (Baru) ---
+// --- FUNGSI 8: MENGHAPUS RESEP ---
 const deleteRecipe = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
     try {
-        // 1. Ambil data resep untuk mendapatkan nama gambarnya
+        // 1. Ambil data resep untuk validasi kepemilikan dan hapus media
         const recipeData = await db.query(
-            'SELECT image_url, user_id FROM recipes WHERE id = $1',
+            'SELECT image_url, video_url, user_id FROM recipes WHERE id = $1',
             [id]
         );
 
-        // Jika resep tidak ditemukan
         if (recipeData.rows.length === 0) {
             return res.status(404).json({ message: "Resep sudah tidak ada di database!" });
         }
 
         const recipe = recipeData.rows[0];
 
-        // 2. Cek kepemilikan (PENTING: Gunakan return agar tidak lanjut ke bawah)
+        // 2. Cek kepemilikan
         if (parseInt(recipe.user_id) !== parseInt(userId)) {
             return res.status(403).json({ message: "Ini bukan resepmu. Tidak boleh dihapus!" });
         }
@@ -450,36 +542,26 @@ const deleteRecipe = async (req, res) => {
         // 3. Hapus data di Database dulu
         await db.query('DELETE FROM recipes WHERE id = $1', [id]);
 
-        // 4. Hapus file di MinIO (Hanya jika resep punya image_url)
-        if (recipe.image_url) {
+        // 4. Hapus file di MinIO (Image / Video) jika ada
+        const fileUrl = recipe.image_url || recipe.video_url;
+        if (fileUrl) {
             try {
-                const urlParts = recipe.image_url.split('/');
-                const fileUrl = recipe.image_url || recipe.video_url;
-
-                if (fileUrl) {
-                    try {
-                        const fileName = fileUrl.split('/').pop(); 
-                        await minioClient.removeObject('foodiegram', `recipes/${fileName}`);
-                    } catch (minioErr) {
-                        console.error('Gagal hapus di MinIO:', minioErr.message);
-                    }
-                }
+                const fileName = fileUrl.split('/').pop(); 
+                // Memastikan objek dihapus sesuai nama file asli di folder recipes
+                await minioClient.removeObject('foodiegram', `recipes/${fileName}`);
             } catch (minioErr) {
-                console.error('❌ MinIO Delete Error:', minioErr.message);
-                // Kita tidak return error 500 di sini karena database sudah terhapus
+                console.error('⚠️ Gagal menghapus file di MinIO:', minioErr.message);
+                // Database sudah terhapus, proses tidak dihentikan
             }
         }
 
-        // Kirim respons sukses hanya SEKALI di akhir
         return res.status(200).json({ 
-            message: "Resep dan gambarnya berhasil dihapus selamanya! 🗑️" 
+            message: "Resep dan media berhasil dihapus selamanya! 🗑️" 
         });
 
     } catch (error) {
         console.error('Error Hapus:', error.message);
-        if (!res.headersSent) {
-            return res.status(500).json({ message: "Gagal total saat mencoba menghapus" });
-        }
+        return res.status(500).json({ message: "Gagal total saat mencoba menghapus" });
     }
 };
 
@@ -488,7 +570,7 @@ const updateRecipe = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    // 1. Validasi data input menggunakan schema yang sudah ada
+    // 1. Validasi Joi Schema
     const { error, value } = recipeSchema.validate(req.body);
     if (error) {
         return res.status(400).json({ 
@@ -502,7 +584,7 @@ const updateRecipe = async (req, res) => {
     try {
         // 2. Cek kepemilikan resep
         const checkOwnership = await db.query(
-            'SELECT * FROM recipes WHERE id = $1 AND user_id = $2',
+            'SELECT 1 FROM recipes WHERE id = $1 AND user_id = $2',
             [id, userId]
         );
 
@@ -510,7 +592,7 @@ const updateRecipe = async (req, res) => {
             return res.status(403).json({ message: "Anda tidak memiliki akses untuk mengedit resep ini" });
         }
 
-        // 3. Proses ingredients (sama seperti saat create)
+        // 3. Proses format ingredients array
         const ingredientsArray = Array.isArray(ingredients) 
             ? ingredients 
             : ingredients.split(',').map(item => item.trim());
@@ -531,21 +613,21 @@ const updateRecipe = async (req, res) => {
 
         const result = await db.query(query, values);
 
-        res.status(200).json({
+        return res.status(200).json({
             message: 'Resep berhasil diperbarui! ✨',
             recipe: result.rows[0]
         });
     } catch (error) {
         console.error('Error Update Recipe:', error.message);
-        res.status(500).json({ message: 'Gagal memperbarui resep' });
+        return res.status(500).json({ message: 'Gagal memperbarui resep' });
     }
 };
 
-// --- FUNGSI 10: FOLLOW / UNFOLLOW USER (Baru) ---
+// --- FUNGSI 10: FOLLOW / UNFOLLOW USER ---
 const toggleFollow = async (req, res) => {
-    const { following_id } = req.body; // ID orang yang mau diikuti
-    const follower_id = req.user.id;   // ID kamu
-    const username = req.user.username; // Nama kamu
+    const { following_id } = req.body; 
+    const follower_id = req.user.id;   
+    const username = req.user.username; 
 
     if (parseInt(following_id) === parseInt(follower_id)) {
         return res.status(400).json({ message: "Kamu tidak bisa memfollow diri sendiri" });
@@ -553,7 +635,7 @@ const toggleFollow = async (req, res) => {
 
     try {
         const checkFollow = await db.query(
-            'SELECT * FROM follows WHERE follower_id = $1 AND following_id = $2',
+            'SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2',
             [follower_id, following_id]
         );
 
@@ -561,34 +643,31 @@ const toggleFollow = async (req, res) => {
             await db.query('DELETE FROM follows WHERE follower_id = $1 AND following_id = $2', [follower_id, following_id]);
             return res.status(200).json({ message: 'Unfollow berhasil' });
         } else {
-            // 1. Simpan Follow
             await db.query('INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)', [follower_id, following_id]);
 
-            // 2. LOGIKA NOTIFIKASI: Beritahu orang yang difollow
+            // Buat Notifikasi Masuk
             const message = `@${username} mulai mengikuti kamu. 🤝`;
             await db.query(
                 'INSERT INTO notifications (user_id, message) VALUES ($1, $2)',
-                [following_id, message] // recipe_id dikosongkan (null) karena ini urusan profil
+                [following_id, message]
             );
 
             return res.status(201).json({ message: 'Berhasil memfollow user ini! 🤝' });
         }
     } catch (error) {
-        res.status(500).json({ message: 'Gagal memproses follow' });
+        console.error('Error Toggle Follow:', error.message);
+        return res.status(500).json({ message: 'Gagal memproses follow' });
     }
 };
 
+// --- FUNGSI UTAMA: GLOBAL FEED ---
 const getRecipeFeed = async (req, res) => {
     try {
-        // 1. Parameter Pagination
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const offset = (page - 1) * limit;
-
-        // 2. Identifikasi User (untuk is_liked & is_saved)
         const userId = req.user && req.user.id ? parseInt(req.user.id) : 0;
 
-        // 3. Query Ambil Data untuk Feed (Fokus ke resep terbaru)
         const dataQuery = `
             SELECT r.*, c.name as category_name, u.username,
             (SELECT COUNT(*) FROM likes l WHERE l.recipe_id = r.id) as likes_count,
@@ -602,20 +681,17 @@ const getRecipeFeed = async (req, res) => {
             LIMIT $2 OFFSET $3
         `;
 
-        // 4. Query Hitung Total Data
-        const countQuery = `SELECT COUNT(*) FROM recipes`;
+        const countQuery = `SELECT COUNT(*) FROM recipes WHERE status = 'approved'`;
 
-        // Jalankan paralel
         const [result, totalRes] = await Promise.all([
             db.query(dataQuery, [userId, limit, offset]),
             db.query(countQuery)
         ]);
 
-        const totalItems = parseInt(totalRes.rows[0].count);
+        const totalItems = parseInt(totalRes.rows[0].count) || 0;
         const totalPages = Math.ceil(totalItems / limit);
 
-        // 5. Response
-        res.json({
+        return res.status(200).json({
             pagination: {
                 total_items: totalItems,
                 total_pages: totalPages,
@@ -626,11 +702,12 @@ const getRecipeFeed = async (req, res) => {
             data: result.rows
         });
     } catch (error) {
-        console.error("Error di getRecipeFeed:", error);
-        res.status(500).json({ message: "Server Error" });
+        console.error("Error di getRecipeFeed:", error.message);
+        return res.status(500).json({ message: "Server Error" });
     }
 };
 
+// --- FUNGSI FEED BERDASARKAN USER YANG DIFOLLOW ---
 const getFollowingFeed = async (req, res) => {
     const userId = req.user.id;
 
@@ -650,22 +727,21 @@ const getFollowingFeed = async (req, res) => {
         
         const result = await db.query(query, [userId]);
 
-        res.status(200).json({
+        return res.status(200).json({
             message: "Feed dari orang yang kamu ikuti",
             count: result.rowCount,
             data: result.rows
         });
     } catch (error) {
         console.error('Error Following Feed:', error.message);
-        res.status(500).json({ message: "Gagal mengambil feed mengikuti" });
+        return res.status(500).json({ message: "Gagal mengambil feed mengikuti" });
     }
 };
 
-// --- FUNGSI 11: DAFTAR FOLLOWERS & FOLLOWING (UPDATE SESUAI TABEL) ---
+// --- FUNGSI 11: DAFTAR FOLLOWERS ---
 const getFollowers = async (req, res) => {
     try {
         const userId = req.user.id;
-        // Query: u.full_name dihapus karena tidak ada di tabel users kamu
         const query = `
             SELECT u.id, u.username, u.photo_profile
             FROM users u
@@ -673,17 +749,17 @@ const getFollowers = async (req, res) => {
             WHERE f.following_id = $1
         `;
         const result = await db.query(query, [userId]);
-        res.status(200).json(result.rows);
+        return res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error Get Followers:', error.message);
-        res.status(500).json({ message: "Gagal mengambil daftar followers" });
+        return res.status(500).json({ message: "Gagal mengambil daftar followers" });
     }
 };
 
+// --- FUNGSI 11: DAFTAR FOLLOWING ---
 const getFollowing = async (req, res) => {
     try {
         const userId = req.user.id;
-        // Query: u.full_name dihapus dan ganti ke u.photo_profile
         const query = `
             SELECT u.id, u.username, u.photo_profile
             FROM users u
@@ -691,73 +767,71 @@ const getFollowing = async (req, res) => {
             WHERE f.follower_id = $1
         `;
         const result = await db.query(query, [userId]);
-        res.status(200).json(result.rows);
+        return res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error Get Following:', error.message);
-        res.status(500).json({ message: "Gagal mengambil daftar following" });
+        return res.status(500).json({ message: "Gagal mengambil daftar following" });
     }
 };
 
-// --- FUNGSI 12: MENGAMBIL RESEP MILIK USER LAIN (Profil Publik + Status Follow) ---
+// --- FUNGSI 12: GET PROFILE USER LAIN + DATA RESEP ---
 const getUserRecipes = async (req, res) => {
     const { userId } = req.params; 
     const viewerId = req.user && req.user.id ? parseInt(req.user.id) : 0; 
 
     try {
         const query = `
-            SELECT r.*, c.name as category_name, u.username,
+            SELECT r.*, c.name as category_name, u.username, u.bio, u.photo_profile,
             (SELECT COUNT(*) FROM likes l WHERE l.recipe_id = r.id) as likes_count,
             EXISTS(SELECT 1 FROM likes WHERE recipe_id = r.id AND user_id = $2) as is_liked,
             EXISTS(SELECT 1 FROM saves WHERE recipe_id = r.id AND user_id = $2) as is_saved,
-            -- Tambahan status follow untuk profil publik
             EXISTS(SELECT 1 FROM follows WHERE follower_id = $2 AND following_id = $1) as is_following
             FROM recipes r
             LEFT JOIN categories c ON r.category_id = c.id
             LEFT JOIN users u ON r.user_id = u.id
-            WHERE r.user_id = $1
+            WHERE r.user_id = $1 AND r.status = 'approved'
             ORDER BY r.created_at DESC
         `;
         
         const result = await db.query(query, [userId, viewerId]);
 
-        res.status(200).json({
+        // Fallback jika target user belum memposting resep apapun
+        let userBio = null;
+        let userPhoto = null;
+        let isFollowing = false;
+
+        if (result.rows.length > 0) {
+            userBio = result.rows[0].bio;
+            userPhoto = result.rows[0].photo_profile;
+            isFollowing = result.rows[0].is_following;
+        } else {
+            // Jalankan query fallback jika profile tidak memposting resep sama sekali
+            const userCheck = await db.query('SELECT bio, photo_profile FROM users WHERE id = $1', [userId]);
+            if(userCheck.rows.length > 0){
+                userBio = userCheck.rows[0].bio;
+                userPhoto = userCheck.rows[0].photo_profile;
+            }
+            const followCheck = await db.query(
+            'SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2', 
+            [viewerId, userId]);
+            isFollowing = followCheck.rows.length > 0;
+        }
+
+        return res.status(200).json({
             user_id: userId,
-            is_following: result.rows.length > 0 ? result.rows[0].is_following : false,
+            bio: userBio,               
+            photo_profile: userPhoto,       
+            is_following: isFollowing,
             total_recipes: result.rowCount,
             recipes: result.rows
         });
     } catch (error) {
         console.error('Error Get User Recipes:', error.message);
-        res.status(500).json({ message: 'Gagal mengambil resep user tersebut' });
+        return res.status(500).json({ message: 'Gagal mengambil resep user tersebut' });
     }
 };
 
-// --- FUNGSI 13: MENGAMBIL KOLEKSI RESEP YANG DISIMPAN (Bookmark) ---
-const getSavedRecipes = async (req, res) => {
-    const userId = req.user.id;
-
-    try {
-        const query = `
-            SELECT r.*, c.name as category_name, u.username,
-            (SELECT COUNT(*) FROM likes l WHERE l.recipe_id = r.id) as likes_count,
-            TRUE as is_saved -- Karena ini diambil dari tabel saves, pasti true
-            FROM saves s
-            JOIN recipes r ON s.recipe_id = r.id
-            LEFT JOIN categories c ON r.category_id = c.id
-            LEFT JOIN users u ON r.user_id = u.id
-            WHERE s.user_id = $1
-            ORDER BY s.id DESC
-        `;
-        const result = await db.query(query, [userId]);
-        res.status(200).json(result.rows);
-    } catch (error) {
-        console.error('Error Get Saved Recipes:', error.message);
-        res.status(500).json({ message: 'Gagal mengambil koleksi simpanan' });
-    }
-};
-
-// --- FUNGSI CRUD KATEGORI (Baru) ---
-
+// --- FUNGSI CRUD KATEGORI ---
 const createCategory = async (req, res) => {
     const { name } = req.body;
     try {
@@ -765,12 +839,12 @@ const createCategory = async (req, res) => {
             'INSERT INTO categories (name) VALUES ($1) RETURNING *',
             [name]
         );
-        res.status(201).json({
+        return res.status(201).json({
             message: 'Kategori berhasil ditambahkan',
             data: result.rows[0]
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 };
 
@@ -785,12 +859,12 @@ const updateCategory = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Kategori tidak ditemukan' });
         }
-        res.json({
+        return res.status(200).json({
             message: 'Kategori berhasil diperbarui',
             data: result.rows[0]
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 };
 
@@ -801,28 +875,28 @@ const deleteCategory = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Kategori tidak ditemukan' });
         }
-        res.json({ message: 'Kategori berhasil dihapus' });
+        return res.status(200).json({ message: 'Kategori berhasil dihapus' });
     } catch (err) {
         if (err.code === '23503') {
             return res.status(400).json({ 
                 message: 'Gagal menghapus! Kategori ini masih digunakan oleh beberapa resep.' 
             });
         }
-        res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 };
 
-// --- FUNGSI 14: MENGAMBIL DAFTAR KATEGORI (Master Data) ---
 const getCategories = async (req, res) => {
     try {
         const result = await db.query("SELECT * FROM categories ORDER BY name ASC");
-        res.status(200).json(result.rows);
+        return res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error Get Categories:', error.message);
-        res.status(500).json({ message: "Gagal mengambil kategori" });
+        return res.status(500).json({ message: "Gagal mengambil kategori" });
     }
 };
 
+// --- FUNGSI SUBMISSION & VERIFIKASI ADMIN ---
 const getPendingRecipes = async (req, res) => {
     try {
         const query = `
@@ -833,9 +907,9 @@ const getPendingRecipes = async (req, res) => {
             ORDER BY r.created_at ASC
         `;
         const result = await db.query(query);
-        res.status(200).json(result.rows);
+        return res.status(200).json(result.rows);
     } catch (error) {
-        res.status(500).json({ message: "Gagal mengambil antrean resep" });
+        return res.status(500).json({ message: "Gagal mengambil antrean resep" });
     }
 };
 
@@ -853,7 +927,6 @@ const verifyRecipe = async (req, res) => {
     }
 
     try {
-        // 1. Update status resep
         const queryUpdate = `
             UPDATE recipes 
             SET status = $1, rejection_reason = $2, updated_at = NOW() 
@@ -869,7 +942,6 @@ const verifyRecipe = async (req, res) => {
 
         const recipe = result.rows[0];
 
-        // 2. BUAT NOTIFIKASI OTOMATIS
         const notifMessage = status === 'approved' 
             ? `Selamat! Resep "${recipe.title}" kamu telah disetujui. 🎉` 
             : `Maaf, resep "${recipe.title}" kamu ditolak. Alasan: ${reason} ❌`;
@@ -879,17 +951,18 @@ const verifyRecipe = async (req, res) => {
             [recipe.user_id, recipe.id, notifMessage]
         );
 
-        res.status(200).json({ 
+        return res.status(200).json({ 
             message: "Validasi berhasil dan notifikasi telah dikirim ke user.", 
             recipe 
         });
 
     } catch (error) {
         console.error('Error Validasi & Notif:', error.message);
-        res.status(500).json({ message: "Gagal memproses validasi" });
+        return res.status(500).json({ message: "Gagal memproses validasi" });
     }
 };
 
+// --- FUNGSI NOTIFIKASI ---
 const getNotifications = async (req, res) => {
     const userId = req.user.id;
 
@@ -898,13 +971,14 @@ const getNotifications = async (req, res) => {
             `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC`,
             [userId]
         );
-        res.status(200).json(result.rows);
+        return res.status(200).json(result.rows);
     } catch (error) {
-        res.status(500).json({ message: "Gagal mengambil notifikasi" });
+        return res.status(500).json({ message: "Gagal mengambil notifikasi" });
     }
 };
+
 const markNotificationAsRead = async (req, res) => {
-    const { id } = req.params; // ID Notifikasi yang diklik
+    const { id } = req.params; 
     const userId = req.user.id;
 
     try {
@@ -917,37 +991,79 @@ const markNotificationAsRead = async (req, res) => {
             return res.status(404).json({ message: "Notifikasi tidak ditemukan" });
         }
 
-        res.status(200).json({ message: "Notifikasi telah dibaca" });
+        return res.status(200).json({ message: "Notifikasi telah dibaca" });
     } catch (error) {
         console.error('Error Mark Read:', error.message);
-        res.status(500).json({ message: "Gagal memperbarui status notifikasi" });
+        return res.status(500).json({ message: "Gagal memperbarui status notifikasi" });
     }
 };
+
+// --- FUNGSI KESELURUHAN STATISTIK (ADMIN) ---
+const getRecipeStats = async (req, res) => {
+    try {
+        const statsQuery = `
+            SELECT 
+                (SELECT COUNT(*) FROM recipes) as total_posts,
+                (SELECT COALESCE(SUM(views_count), 0) FROM recipes) as total_views,
+                (SELECT COUNT(*) FROM likes) as total_likes,
+                (SELECT COUNT(*) FROM users WHERE role = 'user') as total_users
+        `;
+        
+        const result = await db.query(statsQuery);
+        const stats = result.rows[0];
+
+        return res.status(200).json({
+            total_posts: parseInt(stats.total_posts) || 0,
+            total_views: parseInt(stats.total_views) || 0,
+            total_likes: parseInt(stats.total_likes) || 0,
+            total_users: parseInt(stats.total_users) || 0
+        });
+    } catch (error) {
+        console.error('Error Get Recipe Stats Admin:', error.message);
+        return res.status(500).json({ message: 'Gagal mengambil data statistik dashboard' });
+    }
+};
+
 module.exports = { 
+    // Kategori: Manajemen Resep Inti
     createRecipe, 
+    updateRecipe,
+    deleteRecipe,
     getAllRecipes,
+    getRecipeById,
+    getMyRecipes,
+    getUserRecipes,
+    
+    // Kategori: Feed, Pencarian, & Tren
     getRecipeFeed,
     getFollowingFeed,
     getTrendingRecipes,
     searchByIngredients,
+    
+    // Kategori: Interaksi & Koleksi User
     toggleLike,
+    getLikedRecipes,     
+    
     toggleSave,
+    getSavedRecipes,     
+    
     toggleFollow,
-    getRecipeById,
-    getMyRecipes,
-    getUserRecipes,
-    getUserStats,
-    deleteRecipe ,
-    updateRecipe,
     getFollowers,
     getFollowing,
-    getSavedRecipes,
+    
+    // Kategori: Kategori Resep
     getCategories,
     createCategory,
     updateCategory,
     deleteCategory,
+    
+    // Kategori: Fitur Kurasi Admin
     getPendingRecipes, 
     verifyRecipe,
+    
+    // Kategori: Fitur Pendukung
     getNotifications,
-    markNotificationAsRead
+    markNotificationAsRead,
+    getUserStats,
+    getRecipeStats
 };

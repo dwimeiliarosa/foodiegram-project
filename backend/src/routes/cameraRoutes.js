@@ -4,14 +4,19 @@ const cameraController = require('../controllers/cameraController');
 const authenticateToken = require('../middleware/authMiddleware');
 const multer = require('multer');
 
+// Gunakan memoryStorage agar foto tidak tersimpan permanen di server/MinIO
+// karena kita hanya butuh filenya untuk di-scan oleh AI
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 } // Batasi maksimal 5MB agar upload cepat
+});
 
 /**
  * @swagger
  * /api/camera/search:
  *   post:
- *     summary: Cari resep berdasarkan foto (AI Recognition)
+ *     summary: Cari resep berdasarkan foto bahan makanan (Clarifai AI)
  *     tags: [Camera]
  *     security:
  *       - bearerAuth: []
@@ -27,22 +32,9 @@ const upload = multer({ storage: storage });
  *     responses:
  *       200:
  *         description: Berhasil menganalisis gambar dan menemukan resep
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                 detected:
- *                   type: array
- *                   items:
- *                     type: string
- *                 results:
- *                   type: array
- *                   items:
- *                     type: object
  */
-router.post('/search', authenticateToken, upload.single('image'), cameraController.searchByImage);
+
+// Pastikan memanggil fungsi yang benar: searchByCamera
+router.post('/search', authenticateToken, upload.single('image'), cameraController.searchByCamera);
 
 module.exports = router;

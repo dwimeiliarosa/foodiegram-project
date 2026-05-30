@@ -1,15 +1,27 @@
 const express = require('express');
 const router = express.Router();
 
-const { register, login, getProfile, refreshToken, updateProfile, updateAvatar,deletePhotoProfile } = require('../controllers/authController');
+const {
+    register,
+    login,
+    getProfile,
+    refreshToken,
+    updateProfile,
+    updateAvatar,
+    deletePhotoProfile,
+    changePassword,
+    getAllUsers,
+    getUserById
+} = require('../controllers/authController');
+
 const authenticateToken = require('../middleware/authMiddleware');
 const { upload, uploadAndResize } = require('../middleware/uploadMiddleware');
 
 /**
  * @swagger
  * tags:
- *   - name: Auth
- *     description: Sistem Autentikasi User (Register, Login, & Profile)
+ * - name: Auth
+ *   description: Sistem Autentikasi User (Register, Login, & Profile)
  */
 
 /**
@@ -143,24 +155,32 @@ router.get('/profile', authenticateToken, getProfile);
  *       200:
  *         description: Upload Berhasil
  */
-router.post('/upload-test', authenticateToken, upload.single('image'), uploadAndResize, (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'Tidak ada file yang diupload' });
+router.post(
+    '/upload-test',
+    authenticateToken,
+    upload.single('image'),
+    uploadAndResize,
+    (req, res) => {
+        if (!req.file) {
+            return res.status(400).json({
+                message: 'Tidak ada file yang diupload'
+            });
+        }
+
+        res.json({
+            message: 'Upload berhasil!',
+            url: req.file.url,
+            size: req.file.size,
+            mimetype: req.file.mimetype
+        });
     }
-    
-    res.json({
-        message: 'Upload berhasil!',
-        url: req.file.url, 
-        size: req.file.size,
-        mimetype: req.file.mimetype
-    });
-});
+);
 
 /**
  * @swagger
  * /api/auth/update-profile:
  *   put:
- *     summary: Update data teks profil (username & bio)
+ *     summary: Update data teks profil (username, bio, & email)
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
@@ -177,9 +197,14 @@ router.post('/upload-test', authenticateToken, upload.single('image'), uploadAnd
  *               bio:
  *                 type: string
  *                 example: Backend Developer at PT Micro Data Indonesia.
+ *               email:
+ *                 type: string
+ *                 example: dwi@example.com
  *     responses:
  *       200:
  *         description: Profil berhasil diperbarui
+ *       400:
+ *         description: Email sudah digunakan oleh user lain
  *       401:
  *         description: Token tidak valid
  */
@@ -209,7 +234,13 @@ router.put('/update-profile', authenticateToken, updateProfile);
  *       400:
  *         description: Tidak ada file yang diunggah
  */
-router.put('/update-avatar', authenticateToken, upload.single('image'), uploadAndResize, updateAvatar);
+router.put(
+    '/update-avatar',
+    authenticateToken,
+    upload.single('image'),
+    uploadAndResize,
+    updateAvatar
+);
 
 /**
  * @swagger
@@ -226,5 +257,78 @@ router.put('/update-avatar', authenticateToken, upload.single('image'), uploadAn
  *         description: User tidak ditemukan
  */
 router.delete('/delete-photo', authenticateToken, deletePhotoProfile);
+
+/**
+ * @swagger
+ * /api/auth/change-password:
+ *   put:
+ *     summary: Mengganti password user yang sedang login
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - oldPassword
+ *               - newPassword
+ *             properties:
+ *               oldPassword:
+ *                 type: string
+ *                 example: passwordlama123
+ *               newPassword:
+ *                 type: string
+ *                 example: passwordbaru123
+ *     responses:
+ *       200:
+ *         description: Password berhasil diperbarui! 🔐
+ *       400:
+ *         description: Password lama salah atau data input kurang lengkap
+ *       401:
+ *         description: Token tidak valid
+ */
+router.put('/change-password', authenticateToken, changePassword);
+
+/**
+ * @swagger
+ * /api/auth/users:
+ *   get:
+ *     summary: Mengambil semua daftar user (Fungsi Dashboard/Admin)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil semua data user
+ *       401:
+ *         description: Token tidak valid atau tidak menyertakan token
+ */
+router.get('/users', authenticateToken, getAllUsers);
+
+/**
+ * @swagger
+ * /api/auth/users/{id}:
+ *   get:
+ *     summary: Mendapatkan detail profil user lain berdasarkan ID
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID dari user yang ingin dilihat detailnya
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil detail user
+ *       404:
+ *         description: User tidak ditemukan
+ */
+router.get('/users/:id', authenticateToken, getUserById);
 
 module.exports = router;
