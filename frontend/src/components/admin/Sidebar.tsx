@@ -6,7 +6,7 @@ import {
   Tag, 
   LogOut,
   Users,
-  ClipboardCheck // Sudah siap digunakan sebagai icon verifikasi
+  ClipboardCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "../../api/axios";
@@ -32,7 +32,6 @@ const Sidebar = () => {
     fetchAdminProfile();
   }, []);
 
-  // 🎯 UPDATE DI SINI: Menambahkan rute halaman verifikasi resep ke dalam array menu
   const menuItems = [
     {   
       title: "Dashboard", 
@@ -40,7 +39,7 @@ const Sidebar = () => {
       icon: <LayoutDashboard size={20} /> 
     },
     { 
-      title: "Verifikasi Resep", // 👈 Menu baru untuk halaman VerifyRecipes kamu
+      title: "Verifikasi Resep", 
       path: "/admin/verify", 
       icon: <ClipboardCheck size={20} />
     },
@@ -51,7 +50,7 @@ const Sidebar = () => {
     },
     { 
       title: "Kategori", 
-      path: "/admin/kategori", 
+      path: "/admin/kategori", // 👈 Dipastikan mengarah ke halaman CategoryAdmin kustom kita
       icon: <Tag size={20} /> 
     },
     { 
@@ -117,7 +116,7 @@ const Sidebar = () => {
 
       {/* Area Bawah - Dikunci di Dasar Layar */}
       <div className="mt-auto flex-shrink-0 bg-white">
-        {/* Utilities Section */}
+        {/* Utilities Section - Lonceng Notifikasi Aktif */}
         <div className="px-6 py-2 flex justify-center border-t border-slate-50 pt-3">
           <NotificationBell />
         </div>
