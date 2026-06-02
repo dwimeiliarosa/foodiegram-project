@@ -15,22 +15,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 
 const ManageRecipes = () => {
-const [recipes, setRecipes] = useState<any[]>([]);
-const [availableCategories, setAvailableCategories] = useState<any[]>([]);
-const [isSubmitting, setIsSubmitting] = useState(false);
-const [isModalOpen, setIsModalOpen] = useState(false);
-const [isLoadingData, setIsLoadingData] = useState(true);
-const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
-const location = useLocation();
+  const [recipes, setRecipes] = useState<any[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<any[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
+  const location = useLocation();
 
-// BAGIAN YANG SERING ERROR:
-const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-const [rejectId, setRejectId] = useState<number | null>(null);
-const [rejectReason, setRejectReason] = useState(""); 
-const [filterStatus, setFilterStatus] = useState("all"); 
-const [searchTerm, setSearchTerm] = useState("");
-const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
-const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectId, setRejectId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState(""); 
+  const [filterStatus, setFilterStatus] = useState("all"); 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
+  const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -62,19 +61,16 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   }, [formData, editingRecipeId]);
 
   useEffect(() => {
-  const targetId = location.state?.highlightRecipeId;
-  
-  if (targetId && recipes.length > 0) {
-    const foundRecipe = recipes.find(r => r.id === targetId);
-    if (foundRecipe) {
-      setSelectedRecipe(foundRecipe); 
-      setIsVerifyModalOpen(true); // Buka modal verifikasi, BUKAN modal tambah
-      
-      // Bersihkan state lokasi agar tidak terbuka terus saat di-refresh
-      window.history.replaceState({}, document.title);
+    const targetId = location.state?.highlightRecipeId;
+    if (targetId && recipes.length > 0) {
+      const foundRecipe = recipes.find(r => r.id === targetId);
+      if (foundRecipe) {
+        setSelectedRecipe(foundRecipe); 
+        setIsVerifyModalOpen(true);
+        window.history.replaceState({}, document.title);
+      }
     }
-  }
-}, [location.state, recipes]);
+  }, [location.state, recipes]);
 
   const fetchCats = async () => {
     try {
@@ -125,26 +121,20 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   useEffect(() => { fetchCats(); fetchRecipes(); }, []);
 
   const handleVerify = async (id: number, status: 'approved' | 'rejected') => {
-  try {
-    const payload = {
-      status, 
-      // GANTI DARI rejection_reason MENJADI reason SESUAI SWAGGER
-      reason: status === 'rejected' ? rejectReason : "" 
-    };
-
-    console.log("Mengirim data ke API:", payload);
-
-    await api.patch(`/recipes/admin/verify/${id}`, payload);
-    
-    toast.success(`Resep berhasil di-${status}`);
-    setIsRejectModalOpen(false);
-    setRejectReason(""); 
-    fetchRecipes();
-  } catch (error: any) {
-    console.error("Detail Error:", error.response?.data);
-    toast.error(error.response?.data?.message || "Gagal verifikasi");
-  }
-};
+    try {
+      const payload = {
+        status, 
+        reason: status === 'rejected' ? rejectReason : "" 
+      };
+      await api.patch(`/recipes/admin/verify/${id}`, payload);
+      toast.success(`Resep berhasil di-${status}`);
+      setIsRejectModalOpen(false);
+      setRejectReason(""); 
+      fetchRecipes();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Gagal verifikasi");
+    }
+  };
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("Hapus resep ini?")) return;
@@ -157,12 +147,17 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
 
   const handleEdit = (recipe: any) => {
     setEditingRecipeId(recipe.id);
+    
+    // Konversi aman ke string untuk mencegah error .split() jika data null
+    const ingString = typeof recipe.ingredients === 'string' ? recipe.ingredients : "";
+    const stepString = typeof recipe.steps === 'string' ? recipe.steps : "";
+
     setFormData({
-      name: recipe.title,
+      name: recipe.title || "",
       category: recipe.category_id?.toString() || "",
       image: null,
-      ingredients: recipe.ingredients ? recipe.ingredients.split(", ") : [""],
-      steps: recipe.steps ? recipe.steps.split(". ") : [""],
+      ingredients: ingString ? ingString.split(", ") : [""],
+      steps: stepString ? stepString.split(". ") : [""],
       protein: recipe.protein || 0,
       carbs: recipe.carbs || 0,
       fat: recipe.fat || 0,
@@ -184,46 +179,56 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
     if (!formData.category) return toast.error("Kategori harus dipilih!");
     setIsSubmitting(true);
     try {
+      const cleanIngredients = formData.ingredients.filter(i => i.trim() !== "").join(", ");
+      const cleanSteps = formData.steps.filter(s => s.trim() !== "").join(". ");
+
       if (editingRecipeId) {
+        // Mode PUT (Kirim JSON lengkap agar data makro gizi tidak ter-reset)
         const updateData = {
           title: formData.name,
           category_id: parseInt(formData.category),
-          ingredients: formData.ingredients.filter(i => i.trim() !== "").join(", "),
-          steps: formData.steps.filter(s => s.trim() !== "").join(". ")
+          ingredients: cleanIngredients,
+          steps: cleanSteps,
+          cooking_time: formData.cooking_time,
+          protein: formData.protein,
+          carbs: formData.carbs,
+          fat: formData.fat
         };
         await api.put(`/recipes/${editingRecipeId}`, updateData);
+        toast.success("Resep berhasil diperbarui!");
       } else {
+        // Mode POST (Gunakan FormData untuk upload file gambar baru)
         const fd = new FormData();
         fd.append("title", formData.name);
         fd.append("category_id", formData.category);
-        fd.append("ingredients", formData.ingredients.filter(i => i.trim() !== "").join(", "));
-        fd.append("steps", formData.steps.filter(s => s.trim() !== "").join(". "));
+        fd.append("ingredients", cleanIngredients);
+        fd.append("steps", cleanSteps);
         fd.append("cooking_time", formData.cooking_time.toString());
         fd.append("protein", formData.protein.toString());
         fd.append("carbs", formData.carbs.toString());
         fd.append("fat", formData.fat.toString());
         fd.append("post_type", "photo");
         if (formData.image) fd.append("image", formData.image);
+        
         await api.post("/recipes", fd);
         localStorage.removeItem("foodiegram_recipe_draft");
+        toast.success("Resep baru berhasil ditambahkan!");
       }
-      toast.success("Berhasil!");
       setIsModalOpen(false);
       resetForm();
       fetchRecipes();
-    } catch (error) { toast.error("Gagal menyimpan."); }
-    finally { setIsSubmitting(false); }
+    } catch (error) { 
+      toast.error("Gagal menyimpan data resep."); 
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const filteredRecipes = (recipes || []).filter((recipe: any) => {
-  const matchesSearch = recipe.title?.toLowerCase().includes(searchTerm.toLowerCase());
-  
-  const matchesStatus = filterStatus === "all" 
-    ? recipe.status !== "rejected" 
-    : recipe.status === filterStatus;
-    
-  return matchesSearch && matchesStatus;
-});
+    const matchesSearch = recipe.title?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === "all" ? true : recipe.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-800">
@@ -250,6 +255,7 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
           </div>
         </div>
 
+        {/* MODAL TAMBAH / EDIT RESEP */}
         <Dialog open={isModalOpen} onOpenChange={(val) => { setIsModalOpen(val); if (!val) resetForm(); }}>
           <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto bg-white">
             <DialogHeader>
@@ -291,9 +297,9 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
                 ))}
               </div>
               <div className="grid grid-cols-4 gap-2">
-                <div><Label>Protein</Label><Input type="number" value={formData.protein} onChange={(e) => setFormData({...formData, protein: parseFloat(e.target.value) || 0})} /></div>
-                <div><Label>Karbo</Label><Input type="number" value={formData.carbs} onChange={(e) => setFormData({...formData, carbs: parseFloat(e.target.value) || 0})} /></div>
-                <div><Label>Lemak</Label><Input type="number" value={formData.fat} onChange={(e) => setFormData({...formData, fat: parseFloat(e.target.value) || 0})} /></div>
+                <div><Label>Protein (g)</Label><Input type="number" value={formData.protein} onChange={(e) => setFormData({...formData, protein: parseFloat(e.target.value) || 0})} /></div>
+                <div><Label>Karbo (g)</Label><Input type="number" value={formData.carbs} onChange={(e) => setFormData({...formData, carbs: parseFloat(e.target.value) || 0})} /></div>
+                <div><Label>Lemak (g)</Label><Input type="number" value={formData.fat} onChange={(e) => setFormData({...formData, fat: parseFloat(e.target.value) || 0})} /></div>
                 <div><Label>Menit</Label><Input type="number" value={formData.cooking_time} onChange={(e) => setFormData({...formData, cooking_time: parseInt(e.target.value) || 0})} /></div>
               </div>
               <div className="space-y-2">
@@ -307,6 +313,7 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
           </DialogContent>
         </Dialog>
 
+        {/* MODAL REJECT REASON */}
         <Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
           <DialogContent className="sm:max-w-[425px] bg-white">
             <DialogHeader>
@@ -337,85 +344,55 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
           </DialogContent>
         </Dialog>
 
-        {/* MODAL VERIFIKASI (HASIL KLIK NOTIFIKASI) */}
-<Dialog open={isVerifyModalOpen} onOpenChange={setIsVerifyModalOpen}>
-  <DialogContent className="sm:max-w-[600px] bg-white">
-    <DialogHeader>
-      <DialogTitle>Verifikasi Resep Baru</DialogTitle>
-      <DialogDescription>
-        Tinjau detail resep sebelum memberikan persetujuan.
-      </DialogDescription>
-    </DialogHeader>
+        {/* MODAL VERIFIKASI DETAIL DARI NOTIFIKASI */}
+        <Dialog open={isVerifyModalOpen} onOpenChange={setIsVerifyModalOpen}>
+          <DialogContent className="sm:max-w-[600px] bg-white">
+            <DialogHeader>
+              <DialogTitle>Verifikasi Resep Baru</DialogTitle>
+              <DialogDescription>Tinjau detail resep sebelum memberikan persetujuan.</DialogDescription>
+            </DialogHeader>
+            {selectedRecipe && (
+              <div className="space-y-4">
+                <div className="flex gap-4 items-start border-b pb-4">
+                  <img src={selectedRecipe.displayImage} className="w-24 h-24 rounded-lg object-cover border" alt="Preview" />
+                  <div>
+                    <h3 className="font-bold text-lg">{selectedRecipe.title}</h3>
+                    <p className="text-sm text-slate-500">ID Resep: #{selectedRecipe.id}</p>
+                    <Badge className="mt-2 bg-amber-100 text-amber-700">PENDING REVIEW</Badge>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="font-bold">Bahan-bahan:</p>
+                    <p className="text-slate-600 text-xs truncate">{selectedRecipe.ingredients || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="font-bold">Informasi Gizi:</p>
+                    <p className="text-slate-600">Protein: {selectedRecipe.protein}g | Waktu: {selectedRecipe.cooking_time} Menit</p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button variant="outline" onClick={() => { setRejectId(selectedRecipe.id); setIsRejectModalOpen(true); setIsVerifyModalOpen(false); }}>
+                    Tolak Resep
+                  </Button>
+                  <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { handleVerify(selectedRecipe.id, 'approved'); setIsVerifyModalOpen(false); }}>
+                    Setujui & Terbitkan
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
-    {selectedRecipe && (
-      <div className="space-y-4">
-        <div className="flex gap-4 items-start border-b pb-4">
-          <img 
-            src={selectedRecipe.displayImage} 
-            className="w-24 h-24 rounded-lg object-cover border" 
-            alt="Preview" 
-          />
-          <div>
-            <h3 className="font-bold text-lg">{selectedRecipe.title}</h3>
-            <p className="text-sm text-slate-500">ID Resep: #{selectedRecipe.id}</p>
-            <Badge className="mt-2 bg-amber-100 text-amber-700">PENDING REVIEW</Badge>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="font-bold">Bahan-bahan:</p>
-            <ul className="list-disc list-inside text-slate-600">
-              {/* Sesuaikan dengan struktur data dari Dwi */}
-              {selectedRecipe.ingredients?.slice(0, 3).map((ing: any, i: number) => (
-                <li key={i}>{ing}</li>
-              ))}
-              {selectedRecipe.ingredients?.length > 3 && <li>...dan lainnya</li>}
-            </ul>
-          </div>
-          <div>
-            <p className="font-bold">Informasi Gizi:</p>
-            <p className="text-slate-600">Protein: {selectedRecipe.protein}g</p>
-            <p className="text-slate-600">Waktu: {selectedRecipe.cooking_time} Menit</p>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button 
-            variant="outline" 
-            onClick={() => {
-               setRejectId(selectedRecipe.id);
-               setIsRejectModalOpen(true);
-               setIsVerifyModalOpen(false);
-            }}
-          >
-            Tolak Resep
-          </Button>
-          <Button 
-            className="bg-green-600 hover:bg-green-700 text-white"
-            onClick={() => {
-              handleVerify(selectedRecipe.id, 'approved');
-              setIsVerifyModalOpen(false);
-            }}
-          >
-            Setujui & Terbitkan
-          </Button>
-        </div>
-      </div>
-    )}
-  </DialogContent>
-</Dialog>
-
+        {/* TABS FILTER */}
         <div className="flex gap-2 mb-4">
-          {['all', 'pending', 'approved'].map((status) => (
+          {['all', 'pending', 'approved', 'rejected'].map((status) => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
               className={cn(
                 "px-4 py-1.5 rounded-full text-xs font-medium transition-all",
-                filterStatus === status
-                  ? "bg-[#F27F22] text-white"
-                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                filterStatus === status ? "bg-[#F27F22] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
               )}
             >
               {status.toUpperCase()}
@@ -423,9 +400,10 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
           ))}
         </div>
 
-        <div className="bg-white rounded-xl border overflow-hidden">
+        {/* TABEL DATA */}
+        <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-slate-50">
               <TableRow>
                 <TableHead>Foto</TableHead>
                 <TableHead>Judul</TableHead>
@@ -436,7 +414,7 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
             <TableBody>
               {isLoadingData ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10">
+                  <TableCell colSpan={4} className="text-center py-10">
                     <Loader2 className="animate-spin mx-auto text-[#F27F22]" />
                   </TableCell>
                 </TableRow>
@@ -446,20 +424,20 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
                     <TableCell>
                       <img src={r.displayImage} className="w-10 h-10 rounded object-cover border" alt={r.title} />
                     </TableCell>
-                    <TableCell className="font-medium">{r.title}</TableCell>
+                    <TableCell className="font-medium text-slate-700">{r.title}</TableCell>
                     <TableCell>
                       <Badge className={cn(
-                        r.status === 'approved' ? "bg-green-100 text-green-700 border-green-200" : "bg-amber-100 text-amber-700 border-amber-200"
+                        r.status === 'approved' ? "bg-green-100 text-green-700 border-green-200" :
+                        r.status === 'rejected' ? "bg-red-100 text-red-700 border-red-200" : "bg-amber-100 text-amber-700 border-amber-200"
                       )}>
                         {r.status?.toUpperCase()}
                       </Badge>
                     </TableCell>
-                    
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
                         {r.status === "pending" && (
                           <>
-                            <Button size="sm" className="bg-green-600 h-8" onClick={() => handleVerify(r.id, 'approved')}>
+                            <Button size="sm" className="bg-green-600 h-8 text-white hover:bg-green-700" onClick={() => handleVerify(r.id, 'approved')}>
                               <Check className="w-4 h-4 mr-1" /> Approve
                             </Button>
                             <Button size="sm" variant="destructive" className="h-8" onClick={() => { setRejectId(r.id); setIsRejectModalOpen(true); }}>
@@ -467,10 +445,10 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
                             </Button>
                           </>
                         )}
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEdit(r)}>
+                        <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200" onClick={() => handleEdit(r)}>
                           <Pencil className="w-4 h-4 text-blue-500" />
                         </Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleDelete(r.id)}>
+                        <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200" onClick={() => handleDelete(r.id)}>
                           <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>
                       </div>
@@ -479,7 +457,7 @@ const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                  <TableCell colSpan={4} className="text-center py-10 text-slate-500">
                     Tidak ada resep yang ditemukan.
                   </TableCell>
                 </TableRow>

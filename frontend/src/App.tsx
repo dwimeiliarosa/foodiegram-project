@@ -7,6 +7,8 @@ import ManageRecipes from "./pages/admin/ManageRecipes";
 import ManageCategories from "./pages/admin/ManageCategories";
 import { Toaster } from 'sonner';
 import ProfileAdmin from "./pages/admin/ProfileAdmin";
+import UserManagement from "./pages/admin/UserManagement";
+import VerifyRecipes from "./pages/admin/VerifyRecipes";
 
 // --- IMPORT USER ---
 import Home from './pages/user/Home'; 
@@ -102,6 +104,18 @@ function App() {
               <ProfileAdmin />
             </ProtectedRoute>
           } />
+
+          <Route path="/admin/users" element={
+            <ProtectedRoute allowedRole="admin">
+              <UserManagement />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/verify" element={
+            <ProtectedRoute allowedRole="admin">
+              <VerifyRecipes />
+            </ProtectedRoute>
+            } />
 
           {/* 404 - NOT FOUND */}
           <Route path="*" element={

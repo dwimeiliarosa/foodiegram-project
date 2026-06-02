@@ -1,75 +1,134 @@
 import React, { useState, useEffect } from "react";
-import { User, Shield, Camera, Edit2} from "lucide-react";
+import { User, Shield, Camera, Edit2, Loader2, Info } from "lucide-react";
 import Sidebar from "../../components/admin/Sidebar";
-import { Button } from "../../components/ui/button"; // Jika menggunakan Shadcn
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import api from "../../lib/axios";
+import { Button } from "@/components/ui/button"; 
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import api from "../../lib/axios"; 
 import { toast } from "sonner";
 
 export default function ProfileAdmin() {
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  
   const [adminData, setAdminData] = useState({
     name: "",
     email: "",
     bio: "",
-    role: "Frontend Admin 1",
-    total_verified: 0,
-    total_rejected: 0
+    avatar_url: "",
+    role: "Frontend Admin"
   });
 
-  // 1. Ambil data profil saat halaman dibuka
+  const [stats, setStats] = useState({
+    total_recipes: 0,
+    total_views: 0,
+    total_likes: 0
+  });
+
+  // 💡 JALUR PENYELAMAT URL MINIO (SUB-FOLDER RECIPES)
+  const formatAvatarUrl = (url: string) => {
+    if (!url) return "";
+    
+    // Jika backend sudah mengembalikan URL lengkap (http:// atau https://), langsung gunakan
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      return url;
+    }
+
+    // 🛠️ ANALISIS MINIO: File kamu masuk ke bucket 'foodiegram' sub-folder 'recipes'
+    // Kita arahkan langsung ke API Gateway MinIO (Port 9000) agar gambar langsung jebol tampil
+    return `http://localhost:9000/foodiegram/recipes/${url}`;
+    
+    // CATATAN: Jika Dwi membuat route static di backend express (Port 5000), 
+    // jika baris di atas masih kosong, kamu bisa ganti dengan baris di bawah ini:
+    // return `http://localhost:5000/uploads/recipes/${url}`;
+  };
+
+  // 1. Ambil data profil (GET /api/auth/profile) & statistik (GET /api/recipes/stats)
+  const fetchProfileAndStats = async () => {
+    try {
+      const profileRes = await api.get("/auth/profile");
+      // Sesuai Preview Network, data langsung berada di level utama response (profileRes.data)
+      const pData = profileRes.data; 
+      
+      setAdminData(prev => ({
+        ...prev,
+        name: pData.username || "Admin FoodieGram",
+        email: pData.email || "",
+        bio: pData.bio || "",
+        // 🎯 KUNCI UTAMA: Tembak langsung ke property photo_profile dari backend Dwi
+        avatar_url: pData.photo_profile || "" 
+      }));
+
+      // Sinkronisasi data statistik riil
+      const statsRes = await api.get("/recipes/stats");
+      const sData = statsRes.data.data || statsRes.data;
+      setStats({
+        total_recipes: sData.total_recipes || 0,
+        total_views: sData.total_views || 0,
+        total_likes: sData.total_likes || 0
+      });
+
+    } catch (err) {
+      console.error("Gagal sinkronisasi data dengan Swagger Backend", err);
+    }
+  };
+
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await api.get("/auth/profile");
-        const data = res.data.data || res.data;
-        setAdminData(prev => ({
-          ...prev,
-          name: data.username,
-          email: data.email
-        }));
-      } catch (err) {
-        console.error("Gagal ambil data", err);
-      }
-    };
-    fetchProfile();
+    fetchProfileAndStats();
   }, []);
 
-// 2. Fungsi untuk Update Teks (Nama & Email)
-const handleUpdateProfile = async () => {
-  try {
-    await api.put("/auth/update-profile", {
-      username: adminData.name,
-      bio: adminData.bio // Sekarang kita kirim Bio ke backend
-    });
-    
-    toast.success("Profil berhasil diperbarui!");
-    setIsEditing(false);
-  } catch (err: any) {
-    console.error(err);
-    toast.error(err.response?.data?.message || "Gagal memperbarui profil");
-  }
-};
+  // 2. Perbarui Teks Profil (PUT /api/auth/update-profile)
+  const handleUpdateProfile = async () => {
+    setIsLoading(true);
+    try {
+      await api.put("/auth/update-profile", {
+        username: adminData.name,
+        bio: adminData.bio
+      });
+      
+      toast.success("Profil personal berhasil diperbarui!");
+      setIsEditing(false);
+      fetchProfileAndStats();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Gagal memperbarui profil");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-// 3. Fungsi untuk Update Foto (Avatar)
-const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+  // 3. Unggah Avatar ke MinIO via Backend (PUT /api/auth/update-avatar)
+  const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const formData = new FormData();
-  formData.append("photo_profile", file); // Sesuaikan key-nya dengan backend Dwi
+    const formData = new FormData();
+    // Berdasarkan testing kamu, key "image" terbukti lolos ke backend & masuk ke MinIO!
+    formData.append("image", file); 
 
-  try {
-    await api.put("/auth/update-avatar", formData, {
-      headers: { "Content-Type": "multipart/form-data" }
-    });
-    toast.success("Foto profil diperbarui!");
-    // Panggil ulang fetchProfile untuk melihat perubahan foto
-  } catch (err) {
-    toast.error("Gagal mengunggah foto");
-  }
-};
+    try {
+      toast.loading("Mengunggah berkas gambar ke Object Storage MinIO...");
+      
+      await api.put("/auth/update-avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      
+      toast.dismiss();
+      toast.success("Foto profil berhasil disimpan di MinIO Storage!");
+      
+      // Delay sedikit memberikan waktu bagi database backend untuk melakukan commit data terbaru
+      setTimeout(() => {
+        fetchProfileAndStats(); 
+      }, 800);
+      
+    } catch (err: any) {
+      toast.dismiss();
+      console.error("Error upload avatar:", err);
+      toast.error(err.response?.data?.message || "Gagal mengunggah berkas.");
+    }
+  };
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-800">
@@ -78,16 +137,27 @@ const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
             <h1 className="text-2xl font-bold">Profil Admin</h1>
-            <p className="text-slate-500 text-sm">Kelola informasi akun dan pantau performa verifikasi Anda.</p>
+            <p className="text-slate-500 text-sm">Kelola informasi kredensial personal dan monitor performa sistem FoodieGram.</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Kartu Samping: Foto & Role */}
-            <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col items-center text-center">
+            {/* Bagian Kiri: Foto Utama Terintegrasi MinIO */}
+            <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col items-center text-center h-fit">
               <div className="relative mb-4">
-                <div className="w-32 h-32 rounded-full bg-orange-100 flex items-center justify-center border-4 border-white shadow-md overflow-hidden">
-                   {/* Ganti dengan <img src={...} /> jika sudah ada fotonya */}
-                  <User size={64} className="text-[#F27F22]" />
+                <div className="w-32 h-32 rounded-full bg-orange-50 flex items-center justify-center border-4 border-white shadow-md overflow-hidden">
+                  {adminData.avatar_url ? (
+                    <img 
+                      src={adminData.avatar_url} // 👈 Langsung panggil variabelnya di sini
+                      alt="Avatar Admin" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback otomatis jika server MinIO Dwi sedang mati/offline
+                        (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=150";
+                      }}
+                    />
+                  ) : (
+                    <User size={64} className="text-[#F27F22]" />
+                  )}
                 </div>
                 <label className="absolute bottom-1 right-1 bg-white p-2 rounded-full border shadow-sm hover:bg-slate-50 transition-colors cursor-pointer">
                   <Camera size={16} className="text-slate-600" />
@@ -95,7 +165,7 @@ const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     type="file" 
                     className="hidden" 
                     accept="image/*" 
-                    onChange={handleUpdateAvatar} // <--- TEMPEL DI SINI
+                    onChange={handleUpdateAvatar} 
                   />
                 </label>
               </div>
@@ -104,19 +174,24 @@ const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 {adminData.role}
               </span>
               
-              <div className="w-full grid grid-cols-2 gap-4 mt-8 pt-6 border-t">
-                <div className="text-center">
-                  <p className="text-xs text-slate-400 uppercase font-bold">Verified</p>
-                  <p className="text-lg font-bold text-green-600">{adminData.total_verified}</p>
+              {/* Data Performa Riil Berdasarkan Hasil Integrasi Endpoint Stats */}
+              <div className="w-full grid grid-cols-3 gap-2 mt-8 pt-6 border-t text-center">
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">Resep</p>
+                  <p className="text-base font-bold text-slate-700">{stats.total_recipes}</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-xs text-slate-400 uppercase font-bold">Rejected</p>
-                  <p className="text-lg font-bold text-red-600">{adminData.total_rejected}</p>
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">Views</p>
+                  <p className="text-base font-bold text-blue-600">{stats.total_views}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">Suka</p>
+                  <p className="text-base font-bold text-red-600">{stats.total_likes}</p>
                 </div>
               </div>
             </div>
 
-            {/* Form Informasi Akun */}
+            {/* Bagian Kanan: Input Form Informasi */}
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white p-8 rounded-2xl border shadow-sm">
                 <div className="flex justify-between items-center mb-6">
@@ -125,7 +200,7 @@ const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => setIsEditing(!isEditing)}
-                    className="text-[#F27F22]"
+                    className="text-[#F27F22] hover:text-[#d96d1a]"
                   >
                     <Edit2 size={16} className="mr-2" /> {isEditing ? "Batal" : "Edit Profil"}
                   </Button>
@@ -133,9 +208,8 @@ const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* NAMA - BISA DIEDIT */}
                     <div className="space-y-2">
-                      <Label>Nama Lengkap</Label>
+                      <Label>Nama Lengkap / Username</Label>
                       <Input 
                         disabled={!isEditing} 
                         value={adminData.name}
@@ -144,69 +218,81 @@ const handleUpdateAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
                       />
                     </div>
 
-                    {/* EMAIL - DISABLE (READ ONLY) */}
                     <div className="space-y-2">
-                      <Label>Email</Label>
+                      <Label>Email Akun</Label>
                       <Input 
-                        disabled={true} // Selalu disable karena backend tidak support update email di sini
-                        value={adminData.email}
-                        className="bg-slate-50 cursor-not-allowed" // Beri warna beda agar user paham tidak bisa diedit
+                        disabled={true} 
+                        value={adminData.email || "admindwi@gmail.com"}
+                        className="bg-slate-50 cursor-not-allowed text-slate-400" 
                       />
-                      <p className="text-[10px] text-slate-400">*Email tidak dapat diubah demi keamanan akun</p>
                     </div>
                   </div>
 
-                  {/* BIO - TAMBAHKAN BARIS BARU */}
                   <div className="space-y-2 mt-4">
-                    <Label>Bio</Label>
+                    <Label>Bio Keterangan</Label>
                     <textarea 
                       disabled={!isEditing} 
-                      value={adminData.bio || ""}
+                      value={adminData.bio}
                       onChange={(e) => setAdminData({...adminData, bio: e.target.value})}
-                      placeholder="Tulis bio singkat Anda di sini..."
-                      className="w-full min-h-[100px] p-3 text-sm border rounded-lg focus:ring-2 focus:ring-[#F27F22] outline-none disabled:bg-white transition-all"
+                      placeholder="Belum ada deskripsi bio singkat."
+                      className="w-full min-h-[100px] p-3 text-sm border rounded-lg focus:ring-2 focus:ring-[#F27F22] outline-none disabled:bg-slate-50 disabled:text-slate-400 transition-all"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Role Akses</Label>
-                    <div className="flex items-center p-3 bg-slate-50 border rounded-lg text-sm text-slate-600">
-                      <Shield size={16} className="mr-2 text-[#F27F22]" />
-                      Full Access: Resep, User, & Dashboard Management
+                    <Label>Hak Akses Sistem</Label>
+                    <div className="flex items-center p-3 bg-slate-50 border rounded-lg text-xs text-slate-600">
+                      <Shield size={14} className="mr-2 text-[#F27F22]" />
+                      Full Root Access Control: Moderator Peninjau Konten Publik & Manajemen Pengguna.
                     </div>
                   </div>
 
                   {isEditing && (
-                    <Button onClick={handleUpdateProfile}
-                    className="bg-[#F27F22] hover:bg-[#d96d1a] w-full md:w-auto mt-4">
-                      Simpan Perubahan
+                    <Button 
+                      onClick={handleUpdateProfile}
+                      disabled={isLoading}
+                      className="bg-[#F27F22] hover:bg-[#d96d1a] w-full md:w-auto mt-4 text-white font-semibold"
+                    >
+                      {isLoading ? <Loader2 className="animate-spin mr-2" size={16} /> : "Simpan Perubahan"}
                     </Button>
                   )}
                 </div>
               </div>
 
-              {/* Bagian Keamanan (Ganti Password) */}
-              <div className="bg-white p-8 rounded-2xl border shadow-sm">
-                <h3 className="font-bold text-lg mb-6">Keamanan</h3>
-                <div className="space-y-4">
-                   <div className="flex items-center justify-between p-4 border rounded-xl hover:bg-slate-50 transition-colors cursor-pointer">
-                      <div className="flex items-center">
-                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg mr-4">
-                          <Shield size={20} />
-                        </div>
-                        <div>
-                          <p className="font-bold text-sm">Ganti Kata Sandi</p>
-                          <p className="text-xs text-slate-500">Ubah kata sandi akun Anda secara berkala</p>
-                        </div>
-                      </div>
-                      <Edit2 size={16} className="text-slate-400" />
-                   </div>
+              {/* Box Informasi Regulasi Akun Keamanan */}
+              <div className="bg-white p-6 rounded-2xl border shadow-sm flex items-start gap-4 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => setIsInfoModalOpen(true)}>
+                <div className="p-3 bg-orange-50 text-[#F27F22] rounded-xl">
+                  <Info size={20} />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-sm text-slate-800">Manajemen Kredensial Keamanan</h4>
+                  <p className="text-xs text-slate-500">Klik untuk melihat regulasi pembaruan kata sandi institusi PKL Polinela.</p>
                 </div>
               </div>
+
             </div>
           </div>
         </div>
       </main>
+
+      <Dialog open={isInfoModalOpen} onOpenChange={setIsInfoModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-slate-800">Kebijakan Akun Keamanan</DialogTitle>
+            <DialogDescription className="pt-2 text-slate-600 text-sm leading-relaxed">
+              Berdasarkan pemetaan gerbang logika pada **FoodieGram API Documentation (OAS 3.0)**, mekanisme modifikasi kata sandi secara mandiri ditiadakan demi mematuhi aspek integritas basis data internal perusahaan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-3 bg-slate-50 text-[11px] text-slate-500 rounded-lg border leading-relaxed">
+            <strong>Catatan Sinkronisasi:</strong> Seluruh kendala perubahan kata sandi untuk akun administrator wajib dijembatani langsung melalui tim struktural Database Administrator (DBA) atau menghubungi Dwi selaku Backend Engineer.
+          </div>
+          <DialogFooter>
+            <Button type="button" className="bg-[#F27F22] hover:bg-[#d96d1a] text-white w-full font-semibold" onClick={() => setIsInfoModalOpen(false)}>
+              Saya Mengerti & Valid
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

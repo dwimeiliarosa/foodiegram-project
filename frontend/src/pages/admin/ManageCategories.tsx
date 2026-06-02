@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "../../components/admin/Sidebar";
 import { Plus, Pencil, Trash2, Tags, Search, Loader2 } from "lucide-react";
 import api from "../../api/axios";
-import { toast } from "sonner"; // Import Toast untuk notifikasi
+import { toast } from "sonner"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -33,12 +33,19 @@ const ManageCategories = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingCategory, setEditingCategory] = useState<any>(null);
 
-  // Ambil Data dari API
+  // Ambil Data dari API Swagger Dwi
   const fetchCategories = async () => {
     setIsLoadingData(true);
     try {
       const response = await api.get("/recipes/categories");
-      setCategories(response.data.categories || response.data);
+      // Menangani variasi format array atau pembungkus objek respons
+      if (response.data && Array.isArray(response.data)) {
+        setCategories(response.data);
+      } else if (response.data?.categories && Array.isArray(response.data.categories)) {
+        setCategories(response.data.categories);
+      } else {
+        setCategories([]);
+      }
     } catch (error) {
       toast.error("Gagal mengambil data kategori");
     } finally {
@@ -63,9 +70,11 @@ const ManageCategories = () => {
     setIsLoading(true);
     try {
       if (editingCategory) {
+        // PUT /api/recipes/categories/{id} sesuai Swagger
         await api.put(`/recipes/categories/${editingCategory.id}`, { name: newCategory });
         toast.success("Berhasil!", { description: "Kategori telah diperbarui." });
       } else {
+        // POST /api/recipes/categories sesuai Swagger
         await api.post("/recipes/categories", { name: newCategory });
         toast.success("Berhasil!", { description: "Kategori baru telah ditambahkan." });
       }
@@ -75,7 +84,7 @@ const ManageCategories = () => {
       setIsModalOpen(false);
       fetchCategories();
     } catch (error: any) {
-      toast.error("Gagal!", { description: error.response?.data?.message || "Terjadi kesalahan." });
+      toast.error("Gagal!", { description: error.response?.data?.message || "Terjadi kesalahan database." });
     } finally {
       setIsLoading(false);
     }
@@ -83,20 +92,21 @@ const ManageCategories = () => {
 
   const handleDeleteCategory = async (id: number) => {
     try {
+      // DELETE /api/recipes/categories/{id} sesuai Swagger
       const response = await api.delete(`/recipes/categories/${id}`);
       if (response.status === 200 || response.status === 204) {
         toast.success("Kategori berhasil dihapus");
-        fetchCategories(); // Panggil ulang data agar nomor urut (index) tetap rapi
+        fetchCategories(); 
       }
     } catch (error: any) {
       toast.error("Gagal menghapus kategori", {
-        description: error.response?.data?.message || "Coba lagi nanti."
+        description: error.response?.data?.message || "Kategori ini masih terikat dengan resep aktif."
       });
     }
   };
 
   const filteredCategories = categories.filter((cat) =>
-    cat.name.toLowerCase().includes(searchTerm.toLowerCase())
+    cat?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -180,7 +190,7 @@ const ManageCategories = () => {
                   </TableRow>
                 ) : filteredCategories.length > 0 ? (
                   filteredCategories.map((cat, index) => (
-                    <TableRow key={cat.id}>
+                    <TableRow key={cat.id || index}>
                       <TableCell className="text-slate-500">{index + 1}</TableCell>
                       <TableCell className="font-semibold text-slate-700">{cat.name}</TableCell>
                       <TableCell>
