@@ -1,68 +1,89 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Home, Search, PlusSquare, Bell, User } from 'lucide-react';
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  
+  // State baru untuk menyimpan jumlah notifikasi yang belum dibaca
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const token = localStorage.getItem("authToken") || localStorage.getItem("authtoken");
 
-  const isActive = (path: string) => location.pathname === path;
+  // --- 1. LOGIKA HITUNG BADGE NOTIFIKASI SECARA REAL-TIME ---
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/recipes/notifications', {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+          // Menyaring notifikasi yang memiliki is_read === false atau 0
+          const unreadItems = data.filter((notif: any) => notif.is_read === false || notif.is_read == 0);
+          setUnreadCount(unreadItems.length);
+        }
+      } catch (err) {
+        console.error("Gagal menghitung badge notifikasi:", err);
+      }
+    };
+
+    if (token) {
+      fetchUnreadCount();
+      // Polling setiap 15 detik agar angka ter-update otomatis jika ada aktivitas baru
+      const interval = setInterval(fetchUnreadCount, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [token, location.pathname]);
+
+  // Fungsi bawaan aslimu untuk cek gaya keaktifan menu
+  const getStyle = (path: string) => 
+    location.pathname === path ? "text-orange-500" : "text-slate-400";
+
+  const getStroke = (path: string) => 
+    location.pathname === path ? 2.5 : 2;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-lg border-t border-slate-200 pb-safe">
-      {/* Container max-w-md agar ikon tidak terlalu melebar di layar besar */}
-      <div className="max-w-md mx-auto px-6 h-20 flex items-center justify-between">
-        
-        {/* Home */}
-        <Link 
-          to="/" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Home size={28} strokeWidth={isActive('/') ? 2.5 : 2} />
-        </Link>
-
-        {/* Search */}
-        <Link 
-          to="/search" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/search') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Search size={28} strokeWidth={isActive('/search') ? 2.5 : 2} />
-        </Link>
-
-        {/* TOMBOL UPLOAD (DI TENGAH) */}
-        <Link 
-          to="/upload" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/upload') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <PlusSquare size={32} strokeWidth={isActive('/upload') ? 2.5 : 2} />
-        </Link>
-
-        {/* Notifications */}
-        <Link 
-          to="/notifications" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/notifications') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Bell size={28} strokeWidth={isActive('/notifications') ? 2.5 : 2} />
-        </Link>
-
-        {/* Profile */}
-        <Link 
-          to="/profile" 
-          className={`flex flex-col items-center transition-all duration-300 ${
-            isActive('/profile') ? 'text-[#F17228] scale-110' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <User size={28} strokeWidth={isActive('/profile') ? 2.5 : 2} />
-        </Link>
-
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-8 py-5 flex justify-between items-center z-50">
+      <Home 
+        className={`${getStyle('/')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/')}
+        onClick={() => navigate("/")} 
+      />
+      <Search 
+        className={`${getStyle('/search')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/search')}
+        onClick={() => navigate("/search")} 
+      />
+      {/* Mempertahankan rute asli bawaanmu yaitu /upload */}
+      <PlusSquare 
+        className={`${getStyle('/upload')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/upload')}
+        onClick={() => navigate("/upload")} 
+      />
+      
+      {/* PEMBUNGKUS ICON BELL UNTUK BADGE ANGKA */}
+      <div className="relative flex items-center justify-center">
+        <Bell 
+          className={`${getStyle('/notifications')} cursor-pointer`} 
+          size={28} strokeWidth={getStroke('/notifications')}
+          onClick={() => navigate("/notifications")} 
+        />
+        {/* Balon Badge Oranye akan muncul di pojok kanan atas icon lonceng jika unreadCount > 0 */}
+        {unreadCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center pointer-events-none">
+            {unreadCount}
+          </span>
+        )}
       </div>
-    </nav>
+
+      <User 
+        className={`${getStyle('/profile')} cursor-pointer`} 
+        size={28} strokeWidth={getStroke('/profile')}
+        onClick={() => navigate("/profile")} 
+      />
+    </div>
   );
 };
 

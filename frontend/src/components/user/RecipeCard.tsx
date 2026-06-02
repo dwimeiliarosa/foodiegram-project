@@ -1,75 +1,107 @@
+import { Link } from "react-router-dom";
+import { useState, useEffect } from "react"; 
 import type { Recipe } from "../../types/recipe";
-import { Heart, Bookmark } from "lucide-react";
+import { Heart, Bookmark, User } from "lucide-react";
+import api from "../../api/axios"; 
 
 interface RecipeCardProps {
   recipe: Recipe;
 }
 
 const RecipeCard = ({ recipe }: RecipeCardProps) => {
-  // 1. Gunakan 127.0.0.1 agar lebih stabil dibanding 'localhost'
-  const MINIO_BASE_URL = "http://127.0.0.1:9000/foodiegram/";
+  const BASE_URL_IMAGE = "http://localhost:5000/uploads/";
 
-  // 2. Fungsi Helper yang lebih kuat
-  const getImageUrl = (path: string | null | undefined) => {
-    if (!path || path === "[null]" || path === "") return "";
-console.log("Data Recipe:", recipe);
+  const [isLiked, setIsLiked] = useState(recipe.is_liked || false);
+  const [isSaved, setIsSaved] = useState(recipe.is_saved || false);
 
-    // Bersihkan spasi jika ada
-    const cleanPath = path.trim();
+  // SINKRONISASI STATE: Update state lokal kartu jika ada pembaruan data re-fetch dari komponen induk
+  useEffect(() => {
+    setIsLiked(!!recipe.is_liked);
+    setIsSaved(!!recipe.is_saved);
+  }, [recipe.is_liked, recipe.is_saved]);
 
-    // Jika dari database sudah URL lengkap
-    if (cleanPath.startsWith("http")) {
-      // Jika mengandung storage.com (link dummy di DB kamu), ganti ke placeholder
-      if (cleanPath.includes("storage.com")) {
-        return "https://via.placeholder.com/300?text=Link+Lama+Mati";
-      }
-      return cleanPath;
+  const getImageUrl = (path: string | null) => {
+    if (!path || path === "" || path === "[null]") {
+      return "https://placehold.co/600x400?text=No+Image";
     }
 
-    // Jika hanya nama file (seperti di MinIO kamu), gabungkan
-    return `${MINIO_BASE_URL}${cleanPath}`;
+    if (path.startsWith("http")) {
+      return path.replace("127.0.0.1", "localhost");
+    }
+
+    const MINIO_ENDPOINT = "http://localhost:9000";
+    const BUCKET = "foodiegram";
+    
+    return `${MINIO_ENDPOINT}/${BUCKET}/recipes/${path}`;
+  };
+
+  const handleLike = async (e: React.MouseEvent) => {
+    e.preventDefault(); 
+    try {
+      // Optimistic UI update
+      setIsLiked(!isLiked);
+      await api.post("/recipes/like", { recipe_id: recipe.id });
+    } catch (error) {
+      setIsLiked(recipe.is_liked || false); // Rollback state jika gagal ke server
+      console.error("Like error:", error);
+    }
+  };
+
+  const handleSave = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      setIsSaved(!isSaved);
+      await api.post("/recipes/save", { recipe_id: recipe.id });
+    } catch (error) {
+      setIsSaved(recipe.is_saved || false); // Rollback state jika gagal ke server
+      console.error("Save error:", error);
+    }
   };
 
   return (
-    <div className="flex flex-col group cursor-pointer w-full">
-      {/* 1. Container Gambar */}
-      <div className="aspect-square rounded-[32px] overflow-hidden bg-slate-100 relative mb-2 shadow-sm border border-slate-200">
-        {recipe.image_url && recipe.image_url !== "[null]" ? (
-          <img 
-            src={getImageUrl(recipe.image_url)} 
-            alt={recipe.title} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            onError={(e) => {
-              // Jika link MinIO gagal (karena belum Public), tampilkan ini
-              (e.target as HTMLImageElement).src = "https://via.placeholder.com/300?text=Check+MinIO+Policy";
-            }}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-slate-400 text-sm italic bg-slate-50">
-            No Image Available
-          </div>
-        )}
-      </div>
+    <div className="flex flex-col group w-full">
+      <Link to={`/recipe/${recipe.id}`} className="cursor-pointer">
+        <div className="aspect-square rounded-[32px] overflow-hidden bg-slate-200 relative mb-2 shadow-sm border border-slate-200">
+          <img src={getImageUrl(recipe.image_url)} alt={recipe.title} className="w-full h-full object-cover" />
+        </div>
+      </Link>
 
-      {/* 2. Bar Interaksi */}
       <div className="flex justify-between items-center px-1 mb-1">
-        <button className="text-slate-800 hover:text-red-500 hover:scale-110 transition-all duration-200">
-          <Heart className="w-6 h-6 stroke-[2px]" />
+        <button 
+          onClick={handleLike}
+          className={`hover:scale-110 transition-all duration-200 ${isLiked ? 'text-red-500' : 'text-slate-800'}`}
+        >
+          <Heart className={`w-6 h-6 stroke-[2px] ${isLiked ? 'fill-current' : ''}`} />
         </button>
-        <button className="text-slate-800 hover:text-orange-500 hover:scale-110 transition-all duration-200">
-          <Bookmark className="w-6 h-6 stroke-[2px]" />
+
+        <button 
+          onClick={handleSave}
+          className={`hover:scale-110 transition-all duration-200 ${isSaved ? 'text-orange-500' : 'text-slate-800'}`}
+        >
+          <Bookmark className={`w-6 h-6 stroke-[2px] ${isSaved ? 'fill-current' : ''}`} />
         </button>
       </div>
       
-      {/* 3. Judul & Info */}
-      <div className="px-1">
+      <Link to={`/recipe/${recipe.id}`} className="px-1 cursor-pointer">
         <h3 className="font-bold text-slate-900 text-lg md:text-xl line-clamp-1">
           {recipe.title}
         </h3>
         <p className="text-xs text-slate-500 mt-0.5">
           {recipe.protein}g Protein • {recipe.views_count || 0} Views
         </p>
-      </div>
+      </Link>
+
+      <Link 
+        to={`/user/${recipe.user_id}`} 
+        className="flex items-center gap-1.5 px-1 mt-2 hover:opacity-70 transition-opacity"
+      >
+        <div className="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center">
+          <User size={12} className="text-orange-600" />
+        </div>
+        <span className="text-xs font-semibold text-slate-700">
+          @{recipe.username || "user"}
+        </span>
+      </Link>
     </div>
   );
 };
