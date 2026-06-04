@@ -20,31 +20,40 @@ const NotificationPage = () => {
         console.error("Gagal mengambil data notifikasi:", err);
       }
     };
-
     if (token) fetchNotifications();
   }, [token]);
 
-  // --- 2. FUNGSI KLIK & TANDAI SUDAH DIBACA ---
-  const handleNotifClick = async (id: number, type: string, recipeId?: number) => {
+  // --- 2. FUNGSI KLIK & TANDAI SUDAH DIBACA (DISEMPURNAKAN) ---
+  const handleNotifClick = async (id: number, type: string, recipeId?: number, senderId?: number) => {
     try {
+      // 1. Hit API ke backend untuk menandai bahwa notifikasi telah dibaca
       await fetch(`http://localhost:5000/api/recipes/notifications/${id}/read`, {
         method: 'PUT',
         headers: { "Authorization": `Bearer ${token}` }
       });
-      
-      setNotifications(prev => 
+      // 2. Update state lokal agar warna latar berubah seketika menjadi putih (is_read: true)
+
+      setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, is_read: true } : n)
       );
-
-      // Jika ada rujukan id resep, arahkan pengguna ke detail resep tersebut
-      if (recipeId) {
+      // 3. LOGIKA NAVIGASI BALIK KE ASAL NOTIFIKASI
+      if (type === "follow" || type === "user") {
+        // Jika notifikasi berupa follow, arahkan ke halaman profil user tersebut
+        // Catatan: Pastikan di mapping JSX kamu melemparkan properti id pengirim (misal: notif.sender_id)
+        if (senderId) {
+          navigate(`/profile/${senderId}`);
+        } else {
+          // Fallback jika id pengirim tidak ada, bisa diarahkan ke halaman profile umum atau tetap di tempat
+          console.warn("Sender ID tidak ditemukan untuk tipe follow");
+        }
+      } else if (recipeId) {
+        // Jika ada rujukan id resep (like, comment, atau save), arahkan ke detail resep tersebut
         navigate(`/recipe/${recipeId}`);
       }
     } catch (err) {
-      console.error("Gagal update status baca:", err);
+      console.error("Gagal update status baca atau navigasi:", err);
     }
   };
-
   return (
     <div className="max-w-md mx-auto p-4 pb-24 min-h-screen bg-white">
       {/* HEADER ATAS */}
@@ -54,24 +63,22 @@ const NotificationPage = () => {
         </button>
         <h1 className="text-2xl font-bold text-slate-900">Notifikasi</h1>
       </div>
-
       {/* LIST KONTEN NOTIFIKASI */}
-      <div className="space-y-4">
-        {notifications.length > 0 ? (
-          notifications.map((notif) => (
-            <div 
-              key={notif.id} 
-              onClick={() => handleNotifClick(notif.id, notif.type, notif.recipe_id)}
-              className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${
-                notif.is_read ? "bg-white border-slate-100" : "bg-orange-50 border-orange-200"
-              }`}
-            >
+<div className="space-y-4">
+  {notifications.length > 0 ? (
+    notifications.map((notif) => (
+      <div
+        key={notif.id}
+        onClick={() => handleNotifClick(notif.id, notif.type, notif.recipe_id, notif.sender_id || notif.user_id)}
+        className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${
+          notif.is_read ? "bg-white border-slate-100" : "bg-orange-50 border-orange-200"
+        }`}
+      >
               <div className="flex items-center flex-1">
                 {/* Avatar Lonceng Fleksibel menggantikan Tanda Tanya */}
                 <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mr-3 text-lg">
                   🔔
                 </div>
-                
                 {/* Sinkronisasi Kolom Pesan PostgreSQL Backend */}
                 <div>
                   <p className="text-sm text-slate-800 font-medium">
@@ -84,16 +91,14 @@ const NotificationPage = () => {
                   )}
                 </div>
               </div>
-
               {/* Gambar Resep di Kanan (jika disediakan oleh endpoint backend) */}
               {notif.recipe_image && (
-                <img 
-                  src={notif.recipe_image} 
-                  alt="resep" 
+                <img
+                  src={notif.recipe_image}
+                  alt="resep"
                   className="w-12 h-12 rounded-lg object-cover ml-4 border border-slate-100"
                 />
               )}
-              
               {/* Indikator Oranye Status Belum Dibaca */}
               {!notif.is_read && (
                 <div className="w-2 h-2 bg-orange-500 rounded-full ml-2"></div>
@@ -109,5 +114,5 @@ const NotificationPage = () => {
     </div>
   );
 };
+export default NotificationPage; 
 
-export default NotificationPage;

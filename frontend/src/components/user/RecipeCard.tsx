@@ -14,35 +14,18 @@ const RecipeCard = ({ recipe }: RecipeCardProps) => {
   const [isLiked, setIsLiked] = useState(recipe.is_liked || false);
   const [isSaved, setIsSaved] = useState(recipe.is_saved || false);
 
-  // SINKRONISASI STATE: Update state lokal kartu jika ada pembaruan data re-fetch dari komponen induk
   useEffect(() => {
     setIsLiked(!!recipe.is_liked);
     setIsSaved(!!recipe.is_saved);
   }, [recipe.is_liked, recipe.is_saved]);
 
-  const getImageUrl = (path: string | null) => {
-    if (!path || path === "" || path === "[null]") {
-      return "https://placehold.co/600x400?text=No+Image";
-    }
-
-    if (path.startsWith("http")) {
-      return path.replace("127.0.0.1", "localhost");
-    }
-
-    const MINIO_ENDPOINT = "http://localhost:9000";
-    const BUCKET = "foodiegram";
-    
-    return `${MINIO_ENDPOINT}/${BUCKET}/recipes/${path}`;
-  };
-
   const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault(); 
     try {
-      // Optimistic UI update
       setIsLiked(!isLiked);
       await api.post("/recipes/like", { recipe_id: recipe.id });
     } catch (error) {
-      setIsLiked(recipe.is_liked || false); // Rollback state jika gagal ke server
+      setIsLiked(recipe.is_liked || false);
       console.error("Like error:", error);
     }
   };
@@ -53,16 +36,73 @@ const RecipeCard = ({ recipe }: RecipeCardProps) => {
       setIsSaved(!isSaved);
       await api.post("/recipes/save", { recipe_id: recipe.id });
     } catch (error) {
-      setIsSaved(recipe.is_saved || false); // Rollback state jika gagal ke server
+      setIsSaved(recipe.is_saved || false);
       console.error("Save error:", error);
     }
+  };
+
+  // === 1. TARUH FUNGSI BARU DI SINI (DI ATAS RETURN) ===
+  const getMediaElement = () => {
+    const MINIO_ENDPOINT = "http://localhost:9000";
+    const BUCKET = "foodiegram";
+
+    // Kondisi jika data resep berupa video (reels)
+    if ((recipe.post_type === 'reels' || !recipe.image_url) && recipe.video_url) {
+      let finalVideoUrl = recipe.video_url.replace("127.0.0.1", "localhost");
+      if (!finalVideoUrl.startsWith("http")) {
+        finalVideoUrl = `${MINIO_ENDPOINT}/${BUCKET}/videos/${finalVideoUrl}`;
+      }
+      
+      return (
+        <div className="w-full h-full relative">
+          <video 
+            src={finalVideoUrl} 
+            className="w-full h-full object-cover" 
+            muted 
+            playsInline
+            preload="metadata"
+            onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+            onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+          />
+          <div className="absolute top-3 right-3 bg-black/50 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+            📹 Video
+          </div>
+        </div>
+      );
+    }
+
+    // Kondisi default jika data resep berupa foto biasa
+    let path = recipe.image_url;
+    let finalImageUrl = "https://placehold.co/600x400?text=No+Image";
+
+    if (path && path !== "" && path !== "[null]") {
+      if (path.startsWith("http")) {
+        finalImageUrl = path.replace("127.0.0.1", "localhost");
+      } else {
+        finalImageUrl = `${MINIO_ENDPOINT}/${BUCKET}/recipes/${path}`;
+      }
+    }
+
+    return (
+      <img 
+        src={finalImageUrl} 
+        alt={recipe.title} 
+        className="w-full h-full object-cover" 
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = "https://placehold.co/600x400?text=FoodieGram";
+        }}
+      />
+    );
   };
 
   return (
     <div className="flex flex-col group w-full">
       <Link to={`/recipe/${recipe.id}`} className="cursor-pointer">
         <div className="aspect-square rounded-[32px] overflow-hidden bg-slate-200 relative mb-2 shadow-sm border border-slate-200">
-          <img src={getImageUrl(recipe.image_url)} alt={recipe.title} className="w-full h-full object-cover" />
+          
+          {/* === 2. PANGGIL FUNGSINYA DI SINI SEBAGAI PENGGANTI TAG IMG LAMA === */}
+          {getMediaElement()}
+
         </div>
       </Link>
 

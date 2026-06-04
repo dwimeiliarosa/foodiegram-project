@@ -40,38 +40,49 @@ const UploadRecipe = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  const formData = new FormData();
 
-    const formData = new FormData();
-    formData.append("title", title);
-    formData.append("category_id", categoryId);
-    formData.append("post_type", postType);
-    formData.append("ingredients", ingredients);
-    formData.append("steps", steps);
-    formData.append("cooking_time", cookingTime);
-    formData.append("protein", protein);
-    formData.append("carbs", carbs);
-    formData.append("fat", fat);
-    
-    if (file) {
-      formData.append("image", file); // Sesuai field name di Swagger
+  // 1. Data Teks (Menyesuaikan dengan state asli di komponenmu)
+  formData.append('title', title);
+  formData.append('ingredients', ingredients);
+  formData.append('steps', steps ); 
+  formData.append('post_type', postType); // 'photo' atau 'reels'
+
+  // 2. Data Angka (Wajib di-convert ke String/Number agar divalidasi backend)
+  formData.append('category_id', String(Number(categoryId)));
+  formData.append('cooking_time', String(Number(cookingTime)));
+  formData.append('protein', String(Number(protein)));
+  
+  // 🔥 INI KUNCINYA: Mengirim ke backend dengan key 'carbs' menggunakan state 'carbs' atau 'car    o' milikmu
+  formData.append('carbs', String(Number(carbs || carbs)));
+  
+  formData.append('fat', String(Number(fat)));
+
+  // 3. File Media (Gambar / Video)
+  // Menyesuaikan dengan state file asli milikmu yang terdeteksi bernama 'file'
+  if (file) {
+    formData.append('image', file); 
+  }
+
+  try {
+    const response = await api.post('/recipes', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (response.status === 200 || response.status === 201) {
+      alert("Resep FoodieGram berhasil dipublish!");
+      navigate('/profile');
     }
-
-    try {
-      await api.post("/recipes", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      toast.success("Resep Berhasil Dipublish");
-      navigate("/");
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Gagal mempublish resep");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  } catch (error: any) {
+    console.error("Gagal Ajukan Resep:", error.response?.data);
+    alert(error.response?.data?.message || "Data tidak valid, periksa kembali inputan.");
+  }
+};
   return (
     <div className="max-w-xl mx-auto p-4 pb-24">
       <div className="flex items-center gap-2 mb-6">

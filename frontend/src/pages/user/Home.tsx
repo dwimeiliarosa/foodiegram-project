@@ -20,7 +20,6 @@ const Home = () => {
   // 2. Fungsi Fetch Data yang sinkron dengan fungsi backend getAllRecipes
   const fetchRecipes = async (categoryId: number | string, query: string) => {
     try {
-      // SINKRONISASI: Gunakan endpoint utama agar mendapatkan data resep ter-approved secara lengkap
       let url = "/recipes";
       const params = new URLSearchParams();
       
@@ -31,10 +30,9 @@ const Home = () => {
 
       const res = await api.get(finalUrl);
       
-      // Mengambil data berbentuk array langsung dari res.data (sesuai output getAllRecipes)
       const dataArray = Array.isArray(res.data) ? res.data : (res.data.recipes || []);
       
-      // Urutkan berdasarkan tanggal terbaru (atau views_count sesuai kenyamanan UX kamu)
+      // Mengurutkan berdasarkan views_count tertinggi untuk tren terpopuler
       const sortedData = [...dataArray].sort((a, b) => (b.views_count || 0) - (a.views_count || 0));
       setRecipes(sortedData);
       
@@ -49,14 +47,17 @@ const Home = () => {
     fetchRecipes(activeCategoryID, searchQuery);
   }, [activeCategoryID]);
 
-  // 4. Jalankan fetch saat tombol Search ditekan (mencegah lag ketikan)
+  // 4. Jalankan fetch saat tombol Search ditekan
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     fetchRecipes(activeCategoryID, searchQuery);
   };
 
+  // 🔥 5. AMBIL 3 KONTEN DENGAN VIEWS TERTINGGI UNTUK SECTION TERPOPULER
+  const topThreeRecipes = recipes.slice(0, 3);
+
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4 md:px-0">
       {/* HEADER: Logo, Search, Filter */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-10">
         <div className="flex-shrink-0">
@@ -76,9 +77,7 @@ const Home = () => {
             className="w-full pl-6 pr-24 py-3.5 bg-[#F17228]/10 rounded-full focus:ring-2 focus:ring-orange-400 outline-none placeholder:text-slate-500 font-medium text-lg transition-all"
           />
 
-          {/* KONTROL DI SEBELAH KANAN */}
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {/* Tombol X (Clear) */}
             {searchQuery && (
               <button
                 type="button"
@@ -92,7 +91,6 @@ const Home = () => {
               </button>
             )}
 
-            {/* Tombol Search Utama */}
             <button
               type="submit"
               className="bg-orange-500 hover:bg-orange-600 text-white p-2.5 rounded-full shadow-md shadow-orange-200 transition-all active:scale-90"
@@ -107,6 +105,21 @@ const Home = () => {
           <span className="hidden md:inline text-xl">Filter</span>
         </button>
       </div>
+
+      {/* 🔥 SECTION BARU: 3 VIDEO / RESEP TERPOPULER DI ATAS KATEGORI */}
+      {topThreeRecipes.length > 0 && !searchQuery && (
+        <div className="w-full mb-12">
+          <h2 className="text-2xl font-black text-slate-800 tracking-wide uppercase mb-6 flex items-center gap-2">
+            🔥 RESEP TERPOPULER
+          </h2>
+          {/* Tampilan Grid Khusus Top 3 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8 bg-orange-50/50 p-6 rounded-3xl border border-orange-100">
+            {topThreeRecipes.map((recipe) => (
+              <RecipeCard key={`top-${recipe.id}`} recipe={recipe} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* TABS KATEGORI */}
       <div className="flex overflow-x-auto gap-4 mb-8 pb-2 no-scrollbar">
@@ -124,7 +137,6 @@ const Home = () => {
           Semua
         </button>
 
-        {/* Tombol Dinamis mengirim cat.id */}
         {categories.map((cat) => (
           <button 
             key={cat.id}
@@ -141,7 +153,7 @@ const Home = () => {
         ))}
       </div>
 
-      {/* Grid Resep */}
+      {/* Grid Resep Utama (Feed) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
         {recipes.length > 0 ? (
           recipes.map((recipe) => (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom"; 
-import { Search as SearchIcon, Camera, X, Filter, Home, PlusSquare, Bell, User } from "lucide-react";
+import { Search as SearchIcon, Filter, Home, PlusSquare, Bell, User } from "lucide-react"; // 👈 Icon Camera dicopot
 
 const Search = () => {
   const navigate = useNavigate();
@@ -8,20 +8,17 @@ const Search = () => {
   
   const [ingredients, setIngredients] = useState<string[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [recipes, setRecipes] = useState<any[]>([]);
+  const [recipes, setRecipes] = useState<any[]>([]); // 👈 State selectedImage dibuang
   const [loading, setLoading] = useState(false);
 
   const myFridgeIngredients = ["Cabai", "Lada", "Kunyit", "Bawang Merah", "Ayam", "Telur"];
   const token = localStorage.getItem("authToken") || localStorage.getItem("authtoken");
 
-  // Efek untuk menyinkronkan array ingredients ke teks input (Format: "bahan1, bahan2, ")
-    useEffect(() => {
-  // Setiap kali array ingredients berubah (diklik atau dihapus), 
-  // teks di kolom input akan otomatis terupdate.
-  const text = ingredients.join(", ");
-  setInputValue(text);
-}, [ingredients]);
+  // Efek untuk menyinkronkan array ingredients ke teks input
+  useEffect(() => {
+    const text = ingredients.join(", ");
+    setInputValue(text);
+  }, [ingredients]);
 
   // Logika Fetch Data Awal
   useEffect(() => {
@@ -42,95 +39,77 @@ const Search = () => {
     fetchPopularRecipes();
   }, [token]);
 
-// 1. Perbaiki Logika Klik: Kirim data terbaru langsung ke pencarian
-const toggleFridgeIngredient = (item: string) => {
-  const newIngredients = ingredients.includes(item)
-    ? ingredients.filter((i) => i !== item)
-    : [...ingredients, item];
-
-  setIngredients(newIngredients);
-  
-  // PERBAIKAN: Perbarui teks di kolom input agar sinkron dengan tombol yang diklik
-  setInputValue(newIngredients.join(", ")); 
-  
-  handleSearch(newIngredients); 
-};
-
-const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const value = e.target.value;
-  setInputValue(value); // Biarkan user mengetik apapun, termasuk spasi
-
-  // Hanya update ingredients jika karakter terakhir bukan spasi/koma
-  // Ini agar user bisa mengetik "Ayam Goreng" tanpa terpotong
-  if (!value.endsWith(" ") && !value.endsWith(",")) {
-    const newIngredients = value
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item !== "");
+  const toggleFridgeIngredient = (item: string) => {
+    const newIngredients = ingredients.includes(item)
+      ? ingredients.filter((i) => i !== item)
+      : [...ingredients, item];
 
     setIngredients(newIngredients);
-    // Jalankan pencarian
-    handleSearch(newIngredients);
-  }
-};
-// 2. Perbaiki Handler Search: Terima parameter agar data sinkron
-const handleSearch = async (currentIngredients?: string[]) => {
-  const ingredientsToSearch = currentIngredients || ingredients;
+    setInputValue(newIngredients.join(", ")); 
+    handleSearch(newIngredients); 
+  };
 
-  // Jika tidak ada bahan, jangan kirim request
-  if (ingredientsToSearch.length === 0) return;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
 
-  setLoading(true);
+    if (!value.endsWith(" ") && !value.endsWith(",")) {
+      const newIngredients = value
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item !== "");
 
-  // 1. Gabungkan array menjadi string dipisahkan koma sesuai deskripsi Swagger
-  const itemsParam = ingredientsToSearch.join(",");
-
-  try {
-    // 2. Gunakan metode GET dan masukkan parameter ke URL (?items=...)
-    const response = await fetch(
-      `http://localhost:5000/api/recipes/search-ingredients?items=${encodeURIComponent(itemsParam)}`, 
-      {
-        method: "GET", // Sesuai Swagger
-        headers: { 
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Error Server (${response.status}):`, errorText);
-      return;
+      setIngredients(newIngredients);
+      handleSearch(newIngredients);
     }
+  };
 
-const data = await response.json();
-const rawRecipes = data.recipes || (Array.isArray(data) ? data : []);
+  const handleSearch = async (currentIngredients?: string[]) => {
+    const ingredientsToSearch = currentIngredients || ingredients;
 
-// FILTER TAMBAHAN: Pastikan SEMUA bahan yang dicari ada di dalam resep tersebut
-const filteredRecipes = rawRecipes.filter((recipe: any) => {
-  // Ambil array ingredients dari database (ingat kolom kamu bertipe text[])
-  const recipeIngredients = recipe.ingredients || [];
-  
-  // Cek apakah SETIAP (every) bahan yang dicari Wanda ada di resep ini
-  return ingredientsToSearch.every((searchItem) => 
-    recipeIngredients.some((recipeItem: string) => 
-      recipeItem.toLowerCase().includes(searchItem.toLowerCase())
-    )
-  );
-});
+    if (ingredientsToSearch.length === 0) return;
 
-setRecipes(filteredRecipes);
+    setLoading(true);
+    const itemsParam = ingredientsToSearch.join(",");
 
-  } catch (error) {
-    console.error("Pencarian gagal di sisi Client:", error);
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/recipes/search-ingredients?items=${encodeURIComponent(itemsParam)}`, 
+        {
+          method: "GET",
+          headers: { 
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+        }
+      );
 
-// 3. Hapus useEffect yang memantau [ingredients] agar tidak terjadi double-fetch
-// Karena pencarian sudah dipicu langsung di dalam toggleFridgeIngredient
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error Server (${response.status}):`, errorText);
+        return;
+      }
+
+      const data = await response.json();
+      const rawRecipes = data.recipes || (Array.isArray(data) ? data : []);
+
+      const filteredRecipes = rawRecipes.filter((recipe: any) => {
+        const recipeIngredients = recipe.ingredients || [];
+        return ingredientsToSearch.every((searchItem) => 
+          recipeIngredients.some((recipeItem: string) => 
+            recipeItem.toLowerCase().includes(searchItem.toLowerCase())
+          )
+        );
+      });
+
+      setRecipes(filteredRecipes);
+
+    } catch (error) {
+      console.error("Pencarian gagal di sisi Client:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const isActive = (path: string) => location.pathname === path ? "text-orange-500" : "text-slate-400";
 
@@ -158,17 +137,15 @@ setRecipes(filteredRecipes);
               value={inputValue}
               onChange={handleInputChange}
               placeholder="Cari Resep Dari Kulkas"
-              className="w-full bg-white border-2 border-orange-400 rounded-full py-2.5 pl-11 pr-12 focus:outline-none text-sm font-semibold shadow-sm"
+              
+              className="w-full bg-white border-2 border-orange-400 rounded-full py-2.5 pl-11 pr-4 focus:outline-none text-sm font-semibold shadow-sm"
             />
-            <label htmlFor="cam" className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer">
-              <Camera size={20} className="text-slate-700" />
-            </label>
-            <input type="file" id="cam" hidden onChange={(e) => setSelectedImage(e.target.files?.[0] || null)} />
+            {/* 🔴 Bagian <label> Kamera dan <input type="file"> lama sudah dihapus dari sini */}
           </div>
           <button 
             onClick={() => handleSearch()} 
             className="bg-orange-500 text-white px-7 py-2.5 rounded-full text-sm font-bold shadow-md active:scale-95 transition-all"
-            >
+          >
             Cari
           </button>
         </div>
@@ -184,7 +161,7 @@ setRecipes(filteredRecipes);
                 className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${
                   ingredients.includes(item)
                     ? "bg-orange-500 text-white border-orange-500"
-                    : "bg-orange-500 text-white border-orange-500" // Sesuai SS kamu, semua tombol berwarna oranye
+                    : "bg-orange-100 text-orange-600 border-orange-200" 
                 }`}
               >
                 {item}
@@ -210,19 +187,66 @@ setRecipes(filteredRecipes);
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
-            {recipes.map((recipe, index) => (
-              <div key={recipe.id || index} className="relative rounded-3xl overflow-hidden border border-slate-100 shadow-sm">
-                <img 
-                  src={recipe.image_url?.replace("127.0.0.1", "localhost")} 
-                  className="w-full aspect-square object-cover" 
-                  alt={recipe.title} 
-                />
-                <div className="absolute bottom-2 left-2 bg-orange-500 text-white text-[9px] px-2 py-0.5 rounded-full font-bold">
-                    Match 3/5
-                </div>
-              </div>
-            ))}
-          </div>
+  {recipes.map((recipe, index) => {
+    
+    // 1. AMBIL URL MEDIA SECARA FLEKSIBEL
+    // Jika ada video_url, bersihkan ip 127.0.0.1 menjadi localhost
+    const videoSrc = recipe.video_url ? recipe.video_url.replace("127.0.0.1", "localhost") : null;
+    
+    // Ambil gambar cover (jika ada), jika tidak ada arahkan ke default image mentah MinIO atau placeholder
+    let imgSrc = recipe.image_url ? recipe.image_url.replace("127.0.0.1", "localhost") : null;
+    
+    if (!imgSrc && (!videoSrc)) {
+      imgSrc = "https://placehold.co/500x500?text=No+Image";
+    }
+
+    return (
+      <div 
+        key={recipe.id || index} 
+        onClick={() => navigate(`/recipe/${recipe.id}`)}
+        className="relative rounded-3xl overflow-hidden border border-slate-100 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 aspect-square bg-slate-900"
+      >
+        
+        {/* 2. KONDISI RENDER: JIKA VIDEO (REELS), PAKAI TAG <video> */}
+        {recipe.post_type === 'reels' && videoSrc ? (
+          <video 
+            src={videoSrc}
+            className="w-full h-full object-cover"
+            autoPlay
+            loop
+            muted
+            playsInline
+          />
+        ) : (
+          /* JIKA FOTO BIASA, TETAP PAKAI TAG <img> */
+          <img 
+            src={imgSrc || "https://placehold.co/500x500?text=No+Image"} 
+            className="w-full h-full object-cover" 
+            alt={recipe.title} 
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=500&auto=format&fit=crop&q=60";
+            }}
+          />
+        )}
+        
+        {/* GRADASI HITAM AGAR TEKS TETAP TERBACA */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
+
+        {/* JUDUL RESEP */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 z-10 pointer-events-none">
+          <p className="text-white text-xs font-bold truncate drop-shadow-md mb-6">
+            {recipe.title}
+          </p>
+        </div>
+
+        {/* BADGE MATCH */}
+        <div className="absolute bottom-2 left-2 bg-orange-500 text-white text-[9px] px-2 py-0.5 rounded-full font-bold z-20 shadow-sm">
+            Match 3/5
+        </div>
+      </div>
+    );
+  })}
+</div>
         )}
       </div>
 

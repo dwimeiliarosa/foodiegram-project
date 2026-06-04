@@ -1,6 +1,45 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect,useRef } from "react";
 import { Settings, Plus, Grid, Bookmark, Heart, X } from "lucide-react"; 
 import { useNavigate } from "react-router-dom";
+
+const HoverVideo = ({ src }: { src: string }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const handleMouseEnter = () => {
+    if (videoRef.current) {
+      // Memutar video secara aman lewat jembatan useRef, menangkap error blokir browser
+      videoRef.current.play().catch((err) => console.log("Autoplay ditangguhkan browser:", err));
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0; // Mengembalikan video ke detik awal saat kursor keluar
+    }
+  };
+
+  return (
+    <div 
+      className="w-full h-full relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <video 
+        ref={videoRef}
+        src={src} 
+        className="w-full h-full object-cover"
+        muted 
+        loop 
+        playsInline
+        preload="metadata"
+      />
+      <div className="absolute top-1.5 right-1.5 bg-black/50 text-white px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider">
+        REELS
+      </div>
+    </div>
+  );
+};
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -207,17 +246,41 @@ const Profile = () => {
                 <div 
                   key={item.id || index} 
                   onClick={() => navigate(`/recipe/${item.id}`)} 
-                  className="aspect-square bg-gray-100 overflow-hidden cursor-pointer group relative active:scale-95 transition-all"
+                  className="aspect-square bg-slate-100 overflow-hidden cursor-pointer group relative active:scale-95 transition-all rounded-lg"
                 >
-                  <img 
-                    src={getFormattedImageUrl(item.image_url)} 
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-                    alt="resep" 
-                  />
+                  {/* LOGIKA FIX: Jika image_url null DAN tipe konten adalah reels/video, putar video pendek */}
+                  {(item.post_type === 'reels' || !item.image_url) && item.video_url ? (
+                    <div className="w-full h-full relative">
+                      <video 
+                        src={item.video_url.replace("127.0.0.1", "localhost")} 
+                        className="w-full h-full object-cover"
+                        muted 
+                        playsInline
+                        preload="metadata"
+                        onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+                        onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                      />
+                      <div className="absolute top-1.5 right-1.5 bg-black/50 text-white px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider">
+                        REELS
+                      </div>
+                    </div>
+                  ) : (
+                    /* Jika resep gambar biasa (photo), tampilkan tag img seperti biasa */
+                    <img 
+                      src={getFormattedImageUrl(item.image_url)} 
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                      alt="resep" 
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=FoodieGram";
+                      }}
+                    />
+                  )}
                   {/* Overlay tipis saat hover */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all" />
                 </div>
               ))
+              // === POTONGAN KODE BARU SELESAI DI SINI ===
+
             ) : (
               <div className="col-span-3 flex flex-col items-center justify-center py-20 text-gray-400">
                 <div className="bg-gray-50 p-6 rounded-full mb-4">

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import api from "../../api/axios"; // Menggunakan instance axios yang sudah Anda buat
+import api from "../../api/axios"; // Menggunakan instance axios yang sudah dibuat
 import { ArrowLeft, Heart, Bookmark, Trash2, Clock, User } from "lucide-react";
 
 const DetailRecipe = () => {
@@ -16,31 +16,32 @@ const DetailRecipe = () => {
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
+  const isLikeRef = useRef(false);
+  const token = localStorage.getItem("token");
 
   // Ambil data user login dari localStorage
   const userData = localStorage.getItem("user");
   const userParsed = userData ? JSON.parse(userData) : null;
   const currentUserId = userParsed?.id;
 
-useEffect(() => {
-    const fetchDetail = async () => {
-      setLoading(true);
-      try {
+  useEffect(() => {
+    const fetchDetail = async () => {
+      setLoading(true);
+      try {
         // Ambil data detail resep DAN daftar following secara paralel
-        const [resRecipe, resFollowingList] = await Promise.all([
+        const [resRecipe, resFollowingList] = await Promise.all([
           api.get(`/recipes/${id}`),
           api.get(`/recipes/following`).catch(() => ({ data: [] }))
         ]);
 
-        const data = resRecipe.data;
-        setRecipe(data);
-        setIsLiked(data.is_liked || false);
-        setIsSaved(data.is_saved || false);
-        setLikesCount(data.likes_count || 0);
+        const data = resRecipe.data;
+        setRecipe(data);
+        setIsLiked(data.is_liked || false);
+        setIsSaved(data.is_saved || false);
+        setLikesCount(data.likes_count || 0);
 
-        // === LOGIKA VALIDASI STATUS FOLLOW (SINKRON 100%) ===
+        // === LOGIKA VALIDASI STATUS FOLLOW ===
         if (resFollowingList.data && Array.isArray(resFollowingList.data)) {
-          // Kita cek apakah ada ID pembuat resep (data.user_id) di dalam daftar user yang kita ikuti
           const alreadyFollowed = resFollowingList.data.some(
             (followItem: any) => Number(followItem.id) === Number(data.user_id)
           );
@@ -49,30 +50,34 @@ useEffect(() => {
           setIsFollowing(data.is_following || false);
         }
 
-      } catch (error: any) {
-        console.error("Gagal ambil detail:", error);
-        if (error.response?.status === 404) {
-          alert("Resep tidak ditemukan");
-          navigate("/");
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
+      } catch (error: any) {
+        console.error("Gagal ambil detail:", error);
+        if (error.response?.status === 404) {
+          alert("Resep tidak ditemukan");
+          navigate("/");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    if (id) fetchDetail();
-  }, [id, navigate]);
+    if (id) fetchDetail();
+  }, [id, navigate]);
 
-  // --- PERBAIKAN FUNGSI LIKE ---
+  // --- FUNGSI LIKE ---
+  // --- 1. Update fungsi handleLike ---
+// --- FUNGSI LIKE ---
   const handleLike = async () => {
     try {
-      // Gunakan instance 'api' (axios) agar header Authorization otomatis terpasang
       const response = await api.post(`/recipes/like`, { recipe_id: Number(id) });
-
       if (response.status === 200 || response.status === 201) {
         const newLikeStatus = !isLiked;
+        isLikeRef.current = newLikeStatus;
         setIsLiked(newLikeStatus);
         setLikesCount(prev => newLikeStatus ? prev + 1 : prev - 1);
+        
+        // Update state resep agar sinkron
+        setRecipe((prev: any) => ({ ...prev, is_liked: newLikeStatus }));
       }
     } catch (err: any) {
       console.error("Gagal update like:", err);
@@ -80,36 +85,43 @@ useEffect(() => {
     }
   };
 
-  // --- PERBAIKAN FUNGSI SAVE ---
+  // --- FUNGSI SAVE ---
+  // --- FUNGSI SAVE YANG DIPERBAIKI ---
   const handleSave = async () => {
-    try {
-      const response = await api.post("/recipes/save", { recipe_id: Number(id) });
-      if (response.status === 200 || response.status === 201) {
-        setIsSaved(!isSaved);
-      }
-    } catch (error: any) {
-      console.error("Gagal simpan resep:", error);
-      alert("Gagal menyimpan resep");
-    }
-  };
-
-  const handleFollow = async () => {
   try {
-    // UBAH DARI /users/follow MENJADI /recipes/follow
-    const response = await api.post("/recipes/follow", { 
-      following_id: Number(recipe.user_id) // Pastikan ID berupa angka
-    });
-
+    const response = await api.post("/recipes/save", { recipe_id: Number(id) });
     if (response.status === 200 || response.status === 201) {
-      setIsFollowing(!isFollowing);
-      alert(`Berhasil ${isFollowing ? 'berhenti mengikuti' : 'mengikuti'} @${recipe.username}`);
-      // Opsional: refresh data atau ubah state tombol jadi 'Mengikuti'
+      // Toggle state lokal
+      setIsSaved(!isSaved);
+
+      // PENTING: Update state resep dengan mempertahankan status Like yang ada sekarang
+      setRecipe((prev: any) => ({ 
+        ...prev, 
+        is_saved: !isSaved,
+        is_liked: isLiked // Pertahankan status like yang ada di state isLiked
+      }));
     }
   } catch (error: any) {
-    console.error("Error DetailRecipe:", error.response?.data);
-    alert(error.response?.data?.message || "Gagal mengikuti user");
+    console.error("Gagal simpan resep:", error);
+    alert("Gagal menyimpan resep");
   }
 };
+
+  const handleFollow = async () => {
+    try {
+      const response = await api.post("/recipes/follow", { 
+        following_id: Number(recipe.user_id)
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        setIsFollowing(!isFollowing);
+        alert(`Berhasil ${isFollowing ? 'berhenti mengikuti' : 'mengikuti'} @${recipe.username}`);
+      }
+    } catch (error: any) {
+      console.error("Error DetailRecipe:", error.response?.data);
+      alert(error.response?.data?.message || "Gagal mengikuti user");
+    }
+  };
 
   const handleDelete = async () => {
     if (!window.confirm("Hapus resep ini secara permanen?")) return;
@@ -122,10 +134,56 @@ useEffect(() => {
     }
   };
 
-  const getImageUrl = (url: string) => {
-    if (!url) return "https://placehold.co/600x400?text=No+Image";
-    if (url.startsWith('http')) return url.replace("127.0.0.1", "localhost");
-    return `http://localhost:5000/uploads/${url}`; 
+  // --- KONDISI DINAMIS UNTUK RENDERING MEDIA (VIDEO / GAMBAR) ---
+  const renderRecipeMedia = () => {
+    const MINIO_ENDPOINT = "http://localhost:9000";
+    const BUCKET = "foodiegram";
+
+    // 1. Jika bertipe reels atau field image_url kosong tetapi video_url ada, render VIDEO
+    if ((recipe?.post_type === 'reels' || !recipe?.image_url) && recipe?.video_url) {
+      let finalVideoUrl = recipe.video_url.replace("127.0.0.1", "localhost");
+      
+      if (!finalVideoUrl.startsWith("http")) {
+        finalVideoUrl = `${MINIO_ENDPOINT}/${BUCKET}/videos/${finalVideoUrl}`;
+      }
+
+      return (
+        <video 
+          src={finalVideoUrl} 
+          className="w-full h-full object-cover" 
+          controls
+          autoPlay
+          muted
+          playsInline
+        />
+      );
+    }
+
+    // 2. Jika bertipe photo atau default gambar biasa
+    let path = recipe?.image_url;
+    let finalImageUrl = "https://placehold.co/600x400?text=No+Image";
+
+    if (path && path !== "" && path !== "[null]") {
+      if (path.startsWith("http")) {
+        finalImageUrl = path.replace("127.0.0.1", "localhost");
+      } else {
+        // Fallback jika backend mengirim file name lokal lama
+        finalImageUrl = path.includes("uploads/") 
+          ? `http://localhost:5000/${path}` 
+          : `${MINIO_ENDPOINT}/${BUCKET}/recipes/${path}`;
+      }
+    }
+
+    return (
+      <img 
+        src={finalImageUrl} 
+        alt={recipe?.title} 
+        className="w-full h-full object-cover" 
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = "https://placehold.co/600x400?text=FoodieGram";
+        }}
+      />
+    );
   };
 
   if (loading) return <div className="p-10 text-center text-orange-500 font-bold italic">Menyajikan data lezat...</div>;
@@ -142,12 +200,12 @@ useEffect(() => {
           <ArrowLeft size={24} />
         </button>
 
-        {/* Gambar */}
-        <div className="md:w-1/2 h-[400px] md:h-auto bg-slate-100">
-          <img src={getImageUrl(recipe.image_url)} alt={recipe.title} className="w-full h-full object-cover" />
+        {/* Bagian Media (Kiri / Atas) */}
+        <div className="md:w-1/2 h-[400px] md:h-auto bg-slate-100 flex items-center justify-center overflow-hidden">
+          {renderRecipeMedia()}
         </div>
 
-        {/* Konten */}
+        {/* Konten (Kanan / Bawah) */}
         <div className="md:w-1/2 p-8 md:p-12 overflow-y-auto max-h-[100vh] md:max-h-[850px] bg-white">
           <div className="flex justify-between items-center mb-8">
             <div className="flex gap-4 items-center">
@@ -200,7 +258,7 @@ useEffect(() => {
           {/* Nutrisi */}
           <div className="grid grid-cols-3 gap-3 mb-10">
             <NutritionCard label="Protein" value={recipe.protein} color="blue" />
-            <NutritionCard label="Karbo" value={recipe.carbo} color="orange" />
+            <NutritionCard label="Karbo" value={recipe.carbo || recipe.carbs} color="orange" />
             <NutritionCard label="Lemak" value={recipe.fat} color="green" />
           </div>
 
@@ -210,7 +268,7 @@ useEffect(() => {
               <span className="w-2 h-8 bg-orange-500 rounded-full block"></span>
               Bahan-bahan
             </h3>
-            <div className="text-slate-600 bg-orange-50/30 border border-orange-100/50 p-6 rounded-3xl italic">
+            <div className="text-slate-600 bg-orange-50/30 border border-orange-100/50 p-6 rounded-3xl italic whitespace-pre-line">
               {recipe.ingredients || "Bahan belum dicantumkan."}
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from 'sonner';
 
 // --- IMPORT ADMIN ---
 import Login from "./pages/admin/Login";
@@ -6,22 +7,20 @@ import Register from "./pages/admin/Register";
 import Dashboard from "./pages/admin/dashboard"; 
 import ManageRecipes from "./pages/admin/ManageRecipes";
 import ManageCategories from "./pages/admin/ManageCategories";
-import { Toaster } from 'sonner';
+import ProfileAdmin from "./pages/admin/ProfileAdmin";
+import UserManagement from "./pages/admin/UserManagement";
 
 // --- IMPORT USER ---
 import Home from './pages/user/Home'; 
 import Profile from './pages/user/Profile';
-import DetailRecipe from './pages/user/DetailRecipe';
+import RecipeDetail from './pages/user/DetailRecipe'; // Pastikan path ini benar sesuai strukturmu
 import UploadRecipe from './pages/user/UploadRecipe';
 import SettingsPage from './pages/user/SettingsPage';
 import Navbar from './components/user/Navbar';
-import EditProfile from './pages/user/EditProfile'; // Tambahkan ini
-import Search from "./pages/user/Search"; // Sesuaikan folder tempat kamu menyimpan Search.tsx
-import NotificationPage from "./pages/user/NotificationPage"; // Import filenya
+import EditProfile from './pages/user/EditProfile';
+import Search from "./pages/user/Search";
+import NotificationPage from "./pages/user/NotificationPage";
 import UserProfile from "./pages/user/UserProfile";
-
-// Di dalam <Routes>
-<Route path="/notifications" element={<NotificationPage />} />
 
 // --- KOMPONEN PROTECTED ROUTE ---
 const ProtectedRoute = ({ children, allowedRole }: { children: React.ReactNode, allowedRole: "admin" | "user" }) => {
@@ -35,9 +34,7 @@ const ProtectedRoute = ({ children, allowedRole }: { children: React.ReactNode, 
 };
 
 function App() {
-  // Cek apakah user sudah login untuk rute publik yang ingin kita proteksi
   const isAuthenticated = !!localStorage.getItem("authToken");
-  const userRole = localStorage.getItem("userRole");
 
   return (
     <Router>
@@ -50,10 +47,8 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/admin/login" element={<Login />} />
           <Route path="/admin/register" element={<Register />} />
-          <Route path="/search" element={<Search />} />
-          
-          {/* BAGIAN USER (WANDA) */}
-          {/* Jika ingin Home hanya bisa dilihat setelah login, gunakan pengecekan di bawah */}
+
+          {/* BAGIAN USER */}
           <Route path="/" element={
             isAuthenticated ? (
               <><main className="flex-1 container mx-auto px-4 py-8 pb-24"><Home /></main><Navbar /></>
@@ -64,12 +59,14 @@ function App() {
           
           <Route path="/search" element={
             <ProtectedRoute allowedRole="user">
-               <main className="flex-1 container mx-auto px-4 py-8 pb-24"><Search /></main>
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24"><Search /></main>
+              <Navbar />
             </ProtectedRoute>
           } />
+
           <Route path="/recipe/:id" element={
             <ProtectedRoute allowedRole="user">
-              <main className="flex-1 container mx-auto px-4 py-8 pb-24"><DetailRecipe /></main>
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24"><RecipeDetail /></main>
               <Navbar /> 
             </ProtectedRoute>
           } />
@@ -82,11 +79,11 @@ function App() {
           } />
 
           <Route path="/user/:id" element={
-  <ProtectedRoute allowedRole="user">
-    <main className="flex-1 container mx-auto px-4 py-8 pb-24"><UserProfile /></main>
-    <Navbar /> 
-  </ProtectedRoute>
-} />
+            <ProtectedRoute allowedRole="user">
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24"><UserProfile /></main>
+              <Navbar /> 
+            </ProtectedRoute>
+          } />
 
           <Route path="/upload" element={
             <ProtectedRoute allowedRole="user">
@@ -94,7 +91,13 @@ function App() {
               <Navbar /> 
             </ProtectedRoute>
           } />
-          <Route path="/notifications" element={<NotificationPage />} />
+
+          <Route path="/notifications" element={
+            <ProtectedRoute allowedRole="user">
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24"><NotificationPage /></main>
+              <Navbar />
+            </ProtectedRoute>
+          } />
 
           <Route path="/settings" element={
             <ProtectedRoute allowedRole="user">
@@ -104,13 +107,13 @@ function App() {
           } />
 
           <Route path="/edit-profile" element={
-          <ProtectedRoute allowedRole="user">
-            <main className="flex-1 container mx-auto px-4 py-8 pb-24"><EditProfile /></main>
-            <Navbar /> 
-          </ProtectedRoute>
-         } />
+            <ProtectedRoute allowedRole="user">
+              <main className="flex-1 container mx-auto px-4 py-8 pb-24"><EditProfile /></main>
+              <Navbar /> 
+            </ProtectedRoute>
+          } />
 
-          {/* BAGIAN ADMIN (FINKAN) */}
+          {/* BAGIAN ADMIN */}
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           
           <Route path="/admin/dashboard" element={
@@ -128,6 +131,18 @@ function App() {
           <Route path="/admin/kategori" element={
             <ProtectedRoute allowedRole="admin">
               <ManageCategories />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/profile" element={
+            <ProtectedRoute allowedRole="admin">
+              <ProfileAdmin />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/users" element={
+            <ProtectedRoute allowedRole="admin">
+              <UserManagement />
             </ProtectedRoute>
           } />
 
