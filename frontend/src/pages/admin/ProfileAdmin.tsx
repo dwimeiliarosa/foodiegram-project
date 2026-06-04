@@ -1,17 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { User, Shield, Camera, Edit2, Loader2, Info } from "lucide-react";
+import { User, Shield, Camera, Edit2, Loader2, KeyRound, Eye, EyeOff } from "lucide-react";
 import Sidebar from "../../components/admin/Sidebar";
 import { Button } from "@/components/ui/button"; 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import api from "../../lib/axios"; 
 import { toast } from "sonner";
 
 export default function ProfileAdmin() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  
+  // State untuk visibilitas password text
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // State Form Ubah Password sesuai Swagger Dwi
+  const [passwordForm, setPasswordForm] = useState({
+    oldPassword: "",
+    newPassword: ""
+  });
   
   const [adminData, setAdminData] = useState({
     name: "",
@@ -27,29 +36,10 @@ export default function ProfileAdmin() {
     total_likes: 0
   });
 
-  // 💡 JALUR PENYELAMAT URL MINIO (SUB-FOLDER RECIPES)
-  const formatAvatarUrl = (url: string) => {
-    if (!url) return "";
-    
-    // Jika backend sudah mengembalikan URL lengkap (http:// atau https://), langsung gunakan
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      return url;
-    }
-
-    // 🛠️ ANALISIS MINIO: File kamu masuk ke bucket 'foodiegram' sub-folder 'recipes'
-    // Kita arahkan langsung ke API Gateway MinIO (Port 9000) agar gambar langsung jebol tampil
-    return `http://localhost:9000/foodiegram/recipes/${url}`;
-    
-    // CATATAN: Jika Dwi membuat route static di backend express (Port 5000), 
-    // jika baris di atas masih kosong, kamu bisa ganti dengan baris di bawah ini:
-    // return `http://localhost:5000/uploads/recipes/${url}`;
-  };
-
   // 1. Ambil data profil (GET /api/auth/profile) & statistik (GET /api/recipes/stats)
   const fetchProfileAndStats = async () => {
     try {
       const profileRes = await api.get("/auth/profile");
-      // Sesuai Preview Network, data langsung berada di level utama response (profileRes.data)
       const pData = profileRes.data; 
       
       setAdminData(prev => ({
@@ -57,11 +47,9 @@ export default function ProfileAdmin() {
         name: pData.username || "Admin FoodieGram",
         email: pData.email || "",
         bio: pData.bio || "",
-        // 🎯 KUNCI UTAMA: Tembak langsung ke property photo_profile dari backend Dwi
         avatar_url: pData.photo_profile || "" 
       }));
 
-      // Sinkronisasi data statistik riil
       const statsRes = await api.get("/recipes/stats");
       const sData = statsRes.data.data || statsRes.data;
       setStats({
@@ -105,7 +93,6 @@ export default function ProfileAdmin() {
     if (!file) return;
 
     const formData = new FormData();
-    // Berdasarkan testing kamu, key "image" terbukti lolos ke backend & masuk ke MinIO!
     formData.append("image", file); 
 
     try {
@@ -118,7 +105,6 @@ export default function ProfileAdmin() {
       toast.dismiss();
       toast.success("Foto profil berhasil disimpan di MinIO Storage!");
       
-      // Delay sedikit memberikan waktu bagi database backend untuk melakukan commit data terbaru
       setTimeout(() => {
         fetchProfileAndStats(); 
       }, 800);
@@ -127,6 +113,40 @@ export default function ProfileAdmin() {
       toast.dismiss();
       console.error("Error upload avatar:", err);
       toast.error(err.response?.data?.message || "Gagal mengunggah berkas.");
+    }
+  };
+
+  // 4. INTEGRASI BARU: Ubah Password Mandiri (PUT /api/auth/change-password)
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!passwordForm.oldPassword || !passwordForm.newPassword) {
+      toast.error("Semua field kata sandi wajib diisi!");
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      toast.error("Kata sandi baru minimal harus berjumlah 6 karakter.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      // Menembak endpoint Swagger Dwi dengan Request Body application/json
+      await api.put("/auth/change-password", {
+        oldPassword: passwordForm.oldPassword,
+        newPassword: passwordForm.newPassword
+      });
+
+      toast.success("Kata sandi akun admin berhasil diperbarui! 🔐");
+      // Reset form input setelah sukses ganti password
+      setPasswordForm({ oldPassword: "", newPassword: "" });
+    } catch (err: any) {
+      console.error("Gagal merubah password:", err);
+      const msg = err.response?.data?.message || "Password lama salah atau data input kurang lengkap.";
+      toast.error(msg);
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -141,17 +161,16 @@ export default function ProfileAdmin() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Bagian Kiri: Foto Utama Terintegrasi MinIO */}
+            {/* Bagian Kiri: Foto Utama */}
             <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col items-center text-center h-fit">
               <div className="relative mb-4">
                 <div className="w-32 h-32 rounded-full bg-orange-50 flex items-center justify-center border-4 border-white shadow-md overflow-hidden">
                   {adminData.avatar_url ? (
                     <img 
-                      src={adminData.avatar_url} // 👈 Langsung panggil variabelnya di sini
+                      src={adminData.avatar_url} 
                       alt="Avatar Admin" 
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        // Fallback otomatis jika server MinIO Dwi sedang mati/offline
                         (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=150";
                       }}
                     />
@@ -174,7 +193,6 @@ export default function ProfileAdmin() {
                 {adminData.role}
               </span>
               
-              {/* Data Performa Riil Berdasarkan Hasil Integrasi Endpoint Stats */}
               <div className="w-full grid grid-cols-3 gap-2 mt-8 pt-6 border-t text-center">
                 <div>
                   <p className="text-[10px] text-slate-400 uppercase font-bold">Resep</p>
@@ -191,8 +209,10 @@ export default function ProfileAdmin() {
               </div>
             </div>
 
-            {/* Bagian Kanan: Input Form Informasi */}
+            {/* Bagian Kanan: Input Form Informasi & Ubah Password */}
             <div className="lg:col-span-2 space-y-6">
+              
+              {/* Card 1: Informasi Personal */}
               <div className="bg-white p-8 rounded-2xl border shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="font-bold text-lg">Informasi Personal</h3>
@@ -259,40 +279,82 @@ export default function ProfileAdmin() {
                 </div>
               </div>
 
-              {/* Box Informasi Regulasi Akun Keamanan */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm flex items-start gap-4 cursor-pointer hover:bg-slate-50/50 transition-colors" onClick={() => setIsInfoModalOpen(true)}>
-                <div className="p-3 bg-orange-50 text-[#F27F22] rounded-xl">
-                  <Info size={20} />
+              {/* REVISI UTAMA: Card 2 - Form Ubah Kredensial Keamanan Akun */}
+              <div className="bg-white p-8 rounded-2xl border shadow-sm">
+                <div className="flex items-center gap-2 mb-6 border-b pb-3">
+                  <KeyRound className="text-[#F27F22]" size={20} />
+                  <h3 className="font-bold text-lg">Perbarui Kata Sandi</h3>
                 </div>
-                <div className="space-y-1">
-                  <h4 className="font-bold text-sm text-slate-800">Manajemen Kredensial Keamanan</h4>
-                  <p className="text-xs text-slate-500">Klik untuk melihat regulasi pembaruan kata sandi institusi PKL Polinela.</p>
-                </div>
+
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  {/* Input Password Lama */}
+                  <div className="space-y-2 relative">
+                    <Label htmlFor="old_pwd">Kata Sandi Lama</Label>
+                    <div className="relative">
+                      <Input 
+                        id="old_pwd"
+                        type={showOldPassword ? "text" : "password"} 
+                        placeholder="Masukkan password saat ini"
+                        value={passwordForm.oldPassword}
+                        onChange={(e) => setPasswordForm({...passwordForm, oldPassword: e.target.value})}
+                        className="bg-white pr-10 focus-visible:ring-[#F27F22]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowOldPassword(!showOldPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showOldPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Input Password Baru */}
+                  <div className="space-y-2 relative">
+                    <Label htmlFor="new_pwd">Kata Sandi Baru</Label>
+                    <div className="relative">
+                      <Input 
+                        id="new_pwd"
+                        type={showNewPassword ? "text" : "password"} 
+                        placeholder="Masukkan password baru minimal 6 karakter"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                        className="bg-white pr-10 focus-visible:ring-[#F27F22]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tombol Eksekusi Perubahan */}
+                  <div className="pt-2">
+                    <Button 
+                      type="submit"
+                      disabled={isChangingPassword}
+                      className="bg-[#F27F22] hover:bg-[#d96d1a] text-white font-semibold px-6"
+                    >
+                      {isChangingPassword ? (
+                        <>
+                          <Loader2 className="animate-spin mr-2" size={16} />
+                          Memproses Keamanan...
+                        </>
+                      ) : (
+                        "Ganti Password Akun"
+                      )}
+                    </Button>
+                  </div>
+                </form>
               </div>
 
             </div>
           </div>
         </div>
       </main>
-
-      <Dialog open={isInfoModalOpen} onOpenChange={setIsInfoModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white">
-          <DialogHeader>
-            <DialogTitle className="text-slate-800">Kebijakan Akun Keamanan</DialogTitle>
-            <DialogDescription className="pt-2 text-slate-600 text-sm leading-relaxed">
-              Berdasarkan pemetaan gerbang logika pada **FoodieGram API Documentation (OAS 3.0)**, mekanisme modifikasi kata sandi secara mandiri ditiadakan demi mematuhi aspek integritas basis data internal perusahaan.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="p-3 bg-slate-50 text-[11px] text-slate-500 rounded-lg border leading-relaxed">
-            <strong>Catatan Sinkronisasi:</strong> Seluruh kendala perubahan kata sandi untuk akun administrator wajib dijembatani langsung melalui tim struktural Database Administrator (DBA) atau menghubungi Dwi selaku Backend Engineer.
-          </div>
-          <DialogFooter>
-            <Button type="button" className="bg-[#F27F22] hover:bg-[#d96d1a] text-white w-full font-semibold" onClick={() => setIsInfoModalOpen(false)}>
-              Saya Mengerti & Valid
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

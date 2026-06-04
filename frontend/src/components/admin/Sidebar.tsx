@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 import api from "../../api/axios";
 import NotificationBell from "./NotificationBell";
 
+// 1. IMPORT LOGO BARU KAMU
+// Pastikan kamu sudah mendownload/menyimpan gambar logo kamera telur ceplok tersebut 
+// ke dalam folder aset kamu, misalnya: frontend/src/assets/logo-foodiegram.jpg
+import LogoFoodieGram from "../../assets/logo.jpeg"; 
+
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -50,7 +55,7 @@ const Sidebar = () => {
     },
     { 
       title: "Kategori", 
-      path: "/admin/kategori", // 👈 Dipastikan mengarah ke halaman CategoryAdmin kustom kita
+      path: "/admin/kategori", 
       icon: <Tag size={20} /> 
     },
     { 
@@ -70,15 +75,20 @@ const Sidebar = () => {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col z-50 shadow-sm overflow-hidden">
-      {/* Logo Section */}
+      
+      {/* Logo Section - Sudah Diperbarui dengan Gambar Kamera Telur Ceplok Asli */}
       <div className="p-6 flex flex-col items-center gap-2 border-b border-slate-100 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="relative bg-orange-500 p-2 rounded-xl text-white shadow-lg shadow-orange-200 block w-12 h-12 flex-shrink-0">
-             <div className="absolute top-1 left-1/2 -translate-x-1/2 w-4 h-1 bg-white/30 rounded-full" />
-             <div className="w-8 h-8 bg-white rounded-full border-4 border-orange-300 flex items-center justify-center mx-auto">
-                <div className="w-4 h-4 bg-yellow-400 rounded-full shadow-inner" />
-             </div>
-          </div>
+        <div className="flex items-center gap-3">
+          {/* Tag Img Pengganti CSS Artwork Telur Lama */}
+          <img 
+            src={LogoFoodieGram} 
+            alt="FoodieGram Logo" 
+            className="w-11 h-11 object-contain rounded-xl"
+            onError={(e) => {
+              // Fallback jikalau lokasi import file gambar keliru saat development
+              console.error("Gagal memuat gambar logo, pastikan path file import sudah benar.");
+            }}
+          />
           <h1 className="font-extrabold text-2xl tracking-tight text-slate-800">
             Foodie<span className="text-[#F27F22]">Gram</span>
           </h1>
