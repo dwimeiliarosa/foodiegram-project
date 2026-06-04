@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../../components/admin/Sidebar";
-import { Plus, Loader2, Pencil, Trash2, X, Check, XCircle, Search } from "lucide-react";
+import { Plus, Loader2, Pencil, Trash2, X, Check, XCircle, Search, Eye, Heart } from "lucide-react";
 import api from "../../api/axios";
 import { toast } from "sonner";
 import { useLocation } from "react-router-dom";
@@ -148,7 +148,6 @@ const ManageRecipes = () => {
   const handleEdit = (recipe: any) => {
     setEditingRecipeId(recipe.id);
     
-    // Konversi aman ke string untuk mencegah error .split() jika data null
     const ingString = typeof recipe.ingredients === 'string' ? recipe.ingredients : "";
     const stepString = typeof recipe.steps === 'string' ? recipe.steps : "";
 
@@ -183,7 +182,6 @@ const ManageRecipes = () => {
       const cleanSteps = formData.steps.filter(s => s.trim() !== "").join(". ");
 
       if (editingRecipeId) {
-        // Mode PUT (Kirim JSON lengkap agar data makro gizi tidak ter-reset)
         const updateData = {
           title: formData.name,
           category_id: parseInt(formData.category),
@@ -197,7 +195,6 @@ const ManageRecipes = () => {
         await api.put(`/recipes/${editingRecipeId}`, updateData);
         toast.success("Resep berhasil diperbarui!");
       } else {
-        // Mode POST (Gunakan FormData untuk upload file gambar baru)
         const fd = new FormData();
         fd.append("title", formData.name);
         fd.append("category_id", formData.category);
@@ -407,6 +404,7 @@ const ManageRecipes = () => {
               <TableRow>
                 <TableHead>Foto</TableHead>
                 <TableHead>Judul</TableHead>
+                <TableHead>Popularitas</TableHead> {/* KOLOM INTERAKSI USER BARU */}
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
@@ -414,7 +412,7 @@ const ManageRecipes = () => {
             <TableBody>
               {isLoadingData ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-10">
+                  <TableCell colSpan={5} className="text-center py-10">
                     <Loader2 className="animate-spin mx-auto text-[#F27F22]" />
                   </TableCell>
                 </TableRow>
@@ -425,6 +423,21 @@ const ManageRecipes = () => {
                       <img src={r.displayImage} className="w-10 h-10 rounded object-cover border" alt={r.title} />
                     </TableCell>
                     <TableCell className="font-medium text-slate-700">{r.title}</TableCell>
+                    
+                    {/* VALUE METRIK INTERAKSI USER PASIF */}
+                    <TableCell>
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Eye size={14} className="text-slate-400" />
+                          {r.views_count || r.views || 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Heart size={14} className="text-rose-400 fill-rose-50" />
+                          {r.likes_count || r.likes || 0}
+                        </span>
+                      </div>
+                    </TableCell>
+
                     <TableCell>
                       <Badge className={cn(
                         r.status === 'approved' ? "bg-green-100 text-green-700 border-green-200" :
@@ -457,7 +470,7 @@ const ManageRecipes = () => {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-10 text-slate-500">
+                  <TableCell colSpan={5} className="text-center py-10 text-slate-500">
                     Tidak ada resep yang ditemukan.
                   </TableCell>
                 </TableRow>

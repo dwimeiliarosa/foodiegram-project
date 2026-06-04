@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Check, X, Loader2, Utensils, AlertTriangle } from "lucide-react";
+import { Check, X, Loader2, Utensils, AlertTriangle, Clock, Flame } from "lucide-react";
 import Sidebar from "../../components/admin/Sidebar";
 import api from "../../lib/axios";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ interface Recipe {
   image_url?: string;
   photo_profile?: string;
   status: string;
+  cooking_time?: number;
+  protein?: number;
   user?: {
     username: string;
   };
@@ -38,7 +40,7 @@ export default function VerifyRecipes() {
       const data = res.data.data || res.data;
       let finalRecipes = Array.isArray(data) ? data : [];
 
-      // 🔥 Sempurnakan di sini: Jika diakses dari klik lonceng, taruh resep tersebut di paling atas!
+      // Jika diakses dari klik lonceng, taruh resep tersebut di paling atas!
       if (highlightId) {
         finalRecipes = [...finalRecipes].sort((a, b) => (a.id === highlightId ? -1 : b.id === highlightId ? 1 : 0));
       }
@@ -112,7 +114,6 @@ export default function VerifyRecipes() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {recipes.map((recipe) => {
-                // 🎯 DETEKSI: Apakah resep ini yang diklik dari lonceng?
                 const isHighlighted = recipe.id === highlightId;
 
                 return (
@@ -135,6 +136,18 @@ export default function VerifyRecipes() {
                       <div className="space-y-1">
                         <h3 className="font-bold text-lg text-slate-800 line-clamp-1">{recipe.title}</h3>
                         <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{recipe.description}</p>
+                      </div>
+
+                      {/* STATISTIK GIZI DAN DURASI SINGKAT */}
+                      <div className="flex gap-4 text-xs text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <Clock size={14} className="text-amber-500" />
+                          <span>{recipe.cooking_time || 0} Menit</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Flame size={14} className="text-red-500" />
+                          <span>{recipe.protein || 0}g Protein</span>
+                        </div>
                       </div>
 
                       {(recipe.image_url || recipe.photo_profile) && (
@@ -203,7 +216,7 @@ export default function VerifyRecipes() {
                 disabled={!rejectReason.trim()}
                 className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4"
               >
-                Kirrim Penolakan
+                Kirim Penolakan
               </Button>
             </div>
           </div>
