@@ -14,7 +14,6 @@ import {
   Legend,
 } from "chart.js";
 
-// Registrasi komponen Chart.js
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 interface TrendingRecipe {
@@ -24,7 +23,6 @@ interface TrendingRecipe {
   likes: number;
 }
 
-// Interface Tren Bahan Pangan Kulkas
 interface KulkasIngredientTrend {
   name: string;
   search_count: number;
@@ -47,13 +45,11 @@ export default function DashboardAdmin() {
     try {
       setLoading(true);
 
-      // 1. Ambil Profil Admin
       const profileRes = await api.get("/auth/profile");
       if (profileRes.data) {
         setAdminName(profileRes.data.username || "Admin FoodieGram");
       }
 
-      // 2. Ambil Data Resep Trending dari Swagger
       let trendingData: TrendingRecipe[] = [];
       try {
         const trendingRes = await api.get("/recipes/trending");
@@ -62,7 +58,6 @@ export default function DashboardAdmin() {
         console.error("Gagal memuat resep trending:", err);
       }
 
-      // 3. Ambil Real Data Pengguna
       let totalUsersCount = 0;
       try {
         const usersRes = await api.get("/auth/users");
@@ -72,7 +67,6 @@ export default function DashboardAdmin() {
         console.error("Gagal memuat data user untuk counter:", err);
       }
 
-      // 4. Ambil Data Pelacakan Bahan Kulkas (Poin 2)
       try {
         const fridgeRes = await api.get("/refrigerator/stats");
         const fData = fridgeRes.data.data || fridgeRes.data || [];
@@ -82,7 +76,6 @@ export default function DashboardAdmin() {
           throw new Error("Data kosong");
         }
       } catch (err) {
-        // Fallback dinamis disesuaikan dengan fitur kulkas user (Cabai, Lada, Kunyit, Telur, dll)
         setFridgeTrends([
           { name: "Telur Ayam", search_count: 142, percentage: 88 },
           { name: "Cabai", search_count: 120, percentage: 78 },
@@ -92,7 +85,6 @@ export default function DashboardAdmin() {
         ]);
       }
 
-      // 5. Ambil Statistik Umum
       let totalRecipesCount = 89; 
       let verificationQueue = 5;
 
@@ -125,7 +117,6 @@ export default function DashboardAdmin() {
     fetchDashboardData();
   }, []);
 
-  // CONFIGURATION CHART.JS
   const chartData = {
     labels: trendingRecipes.map((r) => r.title.length > 15 ? r.title.substring(0, 15) + "..." : r.title),
     datasets: [
@@ -152,27 +143,12 @@ export default function DashboardAdmin() {
     plugins: {
       legend: {
         position: "top" as const,
-        labels: {
-          boxWidth: 12,
-          font: { size: 11, weight: "bold" as const }
-        }
+        labels: { boxWidth: 12, font: { size: 11, weight: "bold" as const } }
       }
     },
     scales: {
-      y: {
-        type: "linear" as const,
-        display: true,
-        grid: { color: "#f1f5f9" },
-        ticks: { font: { size: 10 } }
-      },
-      x: {
-        grid: { display: false },
-        ticks: {
-          maxRotation: 30,
-          minRotation: 15,
-          font: { size: 10 }
-        }
-      },
+      y: { type: "linear" as const, display: true, grid: { color: "#f1f5f9" }, ticks: { font: { size: 10 } } },
+      x: { grid: { display: false }, ticks: { maxRotation: 30, minRotation: 15, font: { size: 10 } } },
     },
   };
 
@@ -180,7 +156,8 @@ export default function DashboardAdmin() {
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-800">
       <Sidebar />
 
-      <main className="flex-1 min-w-0 lg:pl-64 p-4 lg:p-8 w-full overflow-x-hidden">
+      {/* pt-20 memastikan kontainer turun ke bawah top bar mobile dan tidak menutupi kartu ringkasan */}
+      <main className="flex-1 min-w-0 lg:pl-64 p-4 lg:p-8 w-full overflow-x-hidden pt-20 lg:pt-8">
         <div className="max-w-7xl mx-auto space-y-8">
           
           {/* Header */}
@@ -199,55 +176,66 @@ export default function DashboardAdmin() {
             </div>
           </div>
 
-          {/* KARTU UTAMA RINGKASAN */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Total Pengguna</span>
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-                  <Users size={22} />
+          {/* SKELETON LOADING BOX: Merender animasi shimmer lembut penahan lag saat status memuat bernilai true */}
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4 animate-pulse">
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                    <div className="w-10 h-10 bg-slate-100 rounded-xl"></div>
+                  </div>
+                  <div className="h-8 bg-slate-200 rounded w-1/3"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Card 1: Total Pengguna */}
+              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Total Pengguna</span>
+                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                    <Users size={22} />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-black tracking-tight">{stats.total_users}</span>
+                  <span className="text-xs font-bold text-slate-400">User Terdaftar</span>
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black tracking-tight">
-                  {loading ? <Loader2 className="animate-spin text-slate-300" size={24} /> : stats.total_users}
-                </span>
-                <span className="text-xs font-bold text-slate-400">User Terdaftar</span>
-              </div>
-            </div>
 
-            <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Resep Publik</span>
-                <div className="p-3 bg-orange-50 text-[#F27F22] rounded-xl">
-                  <Utensils size={22} />
+              {/* Card 2: Resep Publik */}
+              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Resep Publik</span>
+                  <div className="p-3 bg-orange-50 text-[#F27F22] rounded-xl">
+                    <Utensils size={22} />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-black tracking-tight">{stats.total_recipes}</span>
+                  <span className="text-xs font-bold text-slate-400">Resep Terbit</span>
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black tracking-tight">
-                  {loading ? <Loader2 className="animate-spin text-slate-300" size={24} /> : stats.total_recipes}
-                </span>
-                <span className="text-xs font-bold text-slate-400">Resep Terbit</span>
-              </div>
-            </div>
 
-            <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Antrean Verifikasi</span>
-                <div className="p-3 bg-amber-50 text-amber-500 rounded-xl">
-                  <ClipboardCheck size={22} />
+              {/* Card 3: Antrean Verifikasi */}
+              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Antrean Verifikasi</span>
+                  <div className="p-3 bg-amber-50 text-amber-500 rounded-xl">
+                    <ClipboardCheck size={22} />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-black tracking-tight text-amber-600">{stats.pending_verification}</span>
+                  <span className="text-xs font-bold text-amber-500">Butuh Review</span>
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black tracking-tight text-amber-600">
-                  {loading ? <Loader2 className="animate-spin text-slate-300" size={24} /> : stats.pending_verification}
-                </span>
-                <span className="text-xs font-bold text-amber-500">Butuh Review</span>
-              </div>
             </div>
-          </div>
+          )}
 
-          {/* Baris Utama Visualisasi (Kiri Grafik, Kanan Gizi Makro Bawaan) */}
+          {/* Baris Utama Visualisasi */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* GRAFIK 10 Resep Terpopuler */}
@@ -261,8 +249,14 @@ export default function DashboardAdmin() {
                 
                 <div className="w-full h-72 mt-2">
                   {loading ? (
-                    <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                      <Loader2 className="animate-spin text-[#F27F22]" />
+                    <div className="w-full h-full flex flex-col justify-between p-2 animate-pulse">
+                      <div className="flex justify-end gap-4"><div className="w-16 h-4 bg-slate-200 rounded"></div><div className="w-16 h-4 bg-slate-200 rounded"></div></div>
+                      <div className="flex items-end gap-3 h-48 pt-4">
+                        {[40, 80, 55, 70, 30, 90, 45, 60, 75, 50].map((h, i) => (
+                          <div key={i} className="flex-1 bg-slate-200 rounded-t-lg" style={{ height: `${h}%` }}></div>
+                        ))}
+                      </div>
+                      <div className="h-4 bg-slate-100 rounded w-full mt-2"></div>
                     </div>
                   ) : trendingRecipes.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-xs text-slate-400 border border-dashed rounded-xl">
@@ -341,10 +335,8 @@ export default function DashboardAdmin() {
             </div>
           </div>
 
-          {/* PANEL BARU: LIVE MONITORING AKTIVITAS USER */}
+          {/* PANEL: LIVE MONITORING AKTIVITAS USER */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-            
-            {/* Kiri & Tengah: Log Aktivitas Kulkas Terkini */}
             <div className="bg-white p-6 rounded-2xl border shadow-sm md:col-span-2 space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
                 <div className="flex items-center gap-2">
@@ -358,7 +350,6 @@ export default function DashboardAdmin() {
               </div>
 
               <div className="space-y-3.5 max-h-[240px] overflow-y-auto pr-2">
-                {/* Log Item 1 */}
                 <div className="flex items-start justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
                   <div className="space-y-1">
                     <p className="text-slate-700">
@@ -376,7 +367,6 @@ export default function DashboardAdmin() {
                   </div>
                 </div>
 
-                {/* Log Item 2 */}
                 <div className="flex items-start justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
                   <div className="space-y-1">
                     <p className="text-slate-700">
@@ -395,7 +385,6 @@ export default function DashboardAdmin() {
               </div>
             </div>
 
-            {/* Kanan: Peringatan Konten Resep Kurang */}
             <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between">
               <div className="space-y-3">
                 <h3 className="font-bold text-base text-slate-800 flex items-center gap-2">
@@ -426,8 +415,7 @@ export default function DashboardAdmin() {
                 *Gunakan data ini untuk menambah variasi resep baru.
               </p>
             </div>
-
-</div>
+          </div>
 
         </div>
       </main>

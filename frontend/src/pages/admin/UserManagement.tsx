@@ -57,12 +57,17 @@ const UserManagement = () => {
       const parsedData = Array.isArray(data) ? data : [];
       
       // Inject data simulasi interaksi pasif agar UI tidak kosong saat demo sidang
-      const enhancedData = parsedData.map((user, idx) => ({
-        ...user,
-        likes_count: user.likes_count || Math.floor(Math.random() * 18) + 2,
-        following_count: user.following_count || Math.floor(Math.random() * 12) + 1,
-        saved_count: user.saved_count || Math.floor(Math.random() * 8) + 0,
-      }));
+      const enhancedData = parsedData.map((user) => {
+        // Membuat kalkulasi angka unik tetapi konsisten menggunakan sisa hasil bagi (Modulus) dari User ID
+        const baseFactor = (user.id % 7) + 1; 
+        
+        return {
+          ...user,
+          likes_count: user.likes_count ?? (baseFactor * 4 + 2),
+          following_count: user.following_count ?? (baseFactor * 3 + 1),
+          saved_count: user.saved_count ?? (baseFactor * 2),
+        };
+      });
 
       setUsers(enhancedData);
     } catch (err) {
